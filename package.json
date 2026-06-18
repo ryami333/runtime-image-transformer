@@ -27,7 +27,7 @@
   "packageManager": "yarn@4.17.0",
   "devDependencies": {
     "@types/node": "24.13.2",
-    "prettier": "^3.7.4",
+    "prettier": "^3.8.4",
     "release-it": "^19.2.3",
     "sharp": "^0.34.5",
     "typescript": "^5.9.3",
