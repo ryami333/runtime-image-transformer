@@ -2,7 +2,7 @@ import path from "node:path";
 import { createImageUrlCodec } from "./createImageUrlCodec";
 import { getTransformCacheKey } from "./getTransformCacheKey";
 import { readTransformCache } from "./readTransformCache";
-import sharp, { type Sharp } from "sharp";
+import Sharp from "sharp";
 import { pipe } from "fp-ts/function";
 import { writeTransformCache } from "./writeTransformCache";
 
@@ -98,7 +98,7 @@ export const createImageTransformRouteHandler = ({
     if (!upstream.ok)
       return new Response("Upstream fetch failed", { status: 502 });
 
-    const input = sharp(Buffer.from(await upstream.arrayBuffer()));
+    const input = Sharp(Buffer.from(await upstream.arrayBuffer()));
 
     const image = pipe(
       input,
@@ -106,12 +106,12 @@ export const createImageTransformRouteHandler = ({
        * auto-orient: read's the image's EXIF data and rotates it to the correct
        * orientation.
        */
-      (image: Sharp) => image.rotate(),
+      (image: Sharp.Sharp) => image.rotate(),
 
       /**
        * Resize
        */
-      (image: Sharp) =>
+      (image: Sharp.Sharp) =>
         transformConfig.w || transformConfig.h
           ? image.resize({
               width: transformConfig.w,
@@ -124,7 +124,7 @@ export const createImageTransformRouteHandler = ({
       /**
        * Change format
        */
-      (image: Sharp) => {
+      (image: Sharp.Sharp) => {
         switch (transformConfig.fmt) {
           case "preserve":
             return image;
