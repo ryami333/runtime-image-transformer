@@ -2169,11 +2169,11 @@ __metadata:
     "@types/node": "npm:24.13.2"
     fp-ts: "npm:^2.16.11"
     prettier: "npm:^3.8.4"
-    release-it: "npm:^19.2.3"
+    release-it: "npm:^19.2.4"
     sharp: "npm:^0.34.5"
     typescript: "npm:^5.9.3"
-    vite: "npm:^7.3.0"
-    zod: "npm:^4.3.5"
+    vite: "npm:^7.3.5"
+    zod: "npm:^4.4.3"
   peerDependencies:
     next: ">=13.4 <17"
     sharp: <1
@@ -2505,9 +2505,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"release-it@npm:^19.2.3":
-  version: 19.2.3
-  resolution: "release-it@npm:19.2.3"
+"release-it@npm:^19.2.4":
+  version: 19.2.4
+  resolution: "release-it@npm:19.2.4"
   dependencies:
     "@nodeutils/defaults-deep": "npm:1.1.0"
     "@octokit/rest": "npm:22.0.1"
@@ -2528,13 +2528,13 @@ __metadata:
     proxy-agent: "npm:6.5.0"
     semver: "npm:7.7.3"
     tinyglobby: "npm:0.2.15"
-    undici: "npm:6.22.0"
+    undici: "npm:6.23.0"
     url-join: "npm:5.0.0"
     wildcard-match: "npm:5.1.4"
     yargs-parser: "npm:21.1.1"
   bin:
     release-it: bin/release-it.js
-  checksum: 10c0/8a7c9576b8335ce13d6929f2f94b01a6af953e2e43ed7f2f3c9eb5072b16299b7e6299084e2b402f48e0cc97b6954a986ec68f6e4211e924937626a48e5a16a2
+  checksum: 10c0/54888f271b665a4efc57b635664438ab256193d24a10928e19997c38b854056ad1bb2d653ede85c7552d45ecdcb1f1aa8861b8c0c27f9aaaf00ba916d3ae1781
   languageName: node
   linkType: hard
 
@@ -2973,10 +2973,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"undici@npm:6.22.0":
-  version: 6.22.0
-  resolution: "undici@npm:6.22.0"
-  checksum: 10c0/47903c489d73e26bd47960cf2f04d63282ed050818b672cb05f8dfb6403381b850cf1b1751832654fd3af22aacd9d780e5e61aff563cd97943f5c4f10d5b3e23
+"undici@npm:6.23.0":
+  version: 6.23.0
+  resolution: "undici@npm:6.23.0"
+  checksum: 10c0/d846b3fdfd05aa6081ba1eab5db6bbc21b283042c7a43722b86d1ee2bf749d7c990ceac0c809f9a07ffd88b1b0f4c0f548a8362c035088cb1997d63abdda499c
   languageName: node
   linkType: hard
 
@@ -3012,9 +3012,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"vite@npm:^7.3.0":
-  version: 7.3.0
-  resolution: "vite@npm:7.3.0"
+"vite@npm:^7.3.5":
+  version: 7.3.5
+  resolution: "vite@npm:7.3.5"
   dependencies:
     esbuild: "npm:^0.27.0"
     fdir: "npm:^6.5.0"
@@ -3063,7 +3063,7 @@ __metadata:
       optional: true
   bin:
     vite: bin/vite.js
-  checksum: 10c0/0457c196cdd5761ec351c0f353945430fbad330e615b9eeab729c8ae163334f18acdc1d9cd7d9d673dbf111f07f6e4f0b25d4ac32360e65b4a6df9991046f3ff
+  checksum: 10c0/4ad700649ed2ebd1e726d32f3f6e41eecbec4e29bcb5977805f3d43a5659280518aa431b0fc61adc1879df4fe1978d7cfc7dbbe54cdf014022385052967721e8
   languageName: node
   linkType: hard
 
@@ -3160,9 +3160,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"zod@npm:^4.3.5":
-  version: 4.3.5
-  resolution: "zod@npm:4.3.5"
-  checksum: 10c0/5a2db7e59177a3d7e202543f5136cb87b97b047b77c8a3d824098d3fa8b80d3aa40a0a5f296965c3b82dfdccdd05dbbfacce91347f16a39c675680fd7b1ab109
+"zod@npm:^4.4.3":
+  version: 4.4.3
+  resolution: "zod@npm:4.4.3"
+  checksum: 10c0/7ea31b558e88f9faf44f31dd185e2e1cbf51fed3081787fb96cc2534749b50c0acfc6da7f0922a7353ed092dd358c7d50c28ea96c94d04af64191bd33152eca3
   languageName: node
   linkType: hard
