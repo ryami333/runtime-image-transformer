@@ -21,7 +21,8 @@
     "emitDeclarationOnly": true,
     "declarationMap": false,
     "outDir": "./dist",
-    "rootDir": "./src"
+    "rootDir": "./src",
+    "types": ["node"]
   },
   "include": ["**/*"],
   "exclude": ["**/node_modules", "dist"]
