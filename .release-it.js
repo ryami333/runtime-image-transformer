@@ -15,7 +15,11 @@ export default {
     publish: true,
   },
   hooks: {
-    "before:init": ["yarn prettier . --check", "yarn tsc --noEmit"],
+    "before:init": [
+      "yarn prettier . --check",
+      "yarn tsc --noEmit",
+      "yarn eslint .",
+    ],
     "after:bump": "yarn build",
   },
 };
