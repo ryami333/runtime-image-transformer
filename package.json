@@ -1,5 +1,5 @@
 {
-  "name": "next-image-transformer",
+  "name": "runtime-image-transformer",
   "version": "1.0.1",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -40,6 +40,11 @@
   "peerDependencies": {
     "next": ">=13.4 <17",
     "sharp": "<1"
+  },
+  "peerDependenciesMeta": {
+    "next": {
+      "optional": true
+    }
   },
   "scripts": {
     "build": "vite build && tsc",

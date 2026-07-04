@@ -1915,24 +1915,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"next-image-transformer@workspace:.":
-  version: 0.0.0-use.local
-  resolution: "next-image-transformer@workspace:."
-  dependencies:
-    "@types/node": "npm:24.13.2"
-    fp-ts: "npm:^2.16.11"
-    prettier: "npm:^3.8.4"
-    release-it: "npm:^20.2.0"
-    sharp: "npm:^0.35.1"
-    typescript: "npm:^6.0.3"
-    vite: "npm:^8.0.16"
-    zod: "npm:^4.4.3"
-  peerDependencies:
-    next: ">=13.4 <17"
-    sharp: <1
-  languageName: unknown
-  linkType: soft
-
 "node-fetch-native@npm:^1.6.6":
   version: 1.6.7
   resolution: "node-fetch-native@npm:1.6.7"
@@ -2371,6 +2353,27 @@ __metadata:
   checksum: 10c0/ab826c57c20f244b2ee807704b1ef4ba7f566aa766481ae5922aac785e2570809e297c69afcccc3593095b538a8a77d26f2b2e9a1d9dffee24e0e039502d1a03
   languageName: node
   linkType: hard
+
+"runtime-image-transformer@workspace:.":
+  version: 0.0.0-use.local
+  resolution: "runtime-image-transformer@workspace:."
+  dependencies:
+    "@types/node": "npm:24.13.2"
+    fp-ts: "npm:^2.16.11"
+    prettier: "npm:^3.8.4"
+    release-it: "npm:^20.2.0"
+    sharp: "npm:^0.35.1"
+    typescript: "npm:^6.0.3"
+    vite: "npm:^8.0.16"
+    zod: "npm:^4.4.3"
+  peerDependencies:
+    next: ">=13.4 <17"
+    sharp: <1
+  peerDependenciesMeta:
+    next:
+      optional: true
+  languageName: unknown
+  linkType: soft
 
 "safer-buffer@npm:>= 2.1.2 < 3.0.0":
   version: 2.1.2

@@ -1,11 +1,13 @@
-# next-image-transformer
+# runtime-image-transformer
 
-Self-hosted, Sharp-powered runtime image transforms for Next.js.
+Self-hosted, Sharp-powered runtime image transforms for server-side web frameworks (Next.js, TanStack Start, and anything else built on the Web `Request`/`Response` API).
 
-Next.js’s built-in image optimization (`next/image` + the `/_next/image` optimizer) is intentionally **constrained and opinionated**. If you want something closer to “Imgix/Cloudinary, but inside your Next.js app,” this package gives you:
+If you want something closer to “Imgix/Cloudinary, but inside your own app,” this package gives you:
 
-- A **route handler** that fetches an upstream image, runs a small set of transforms via **Sharp**, and caches results on disk.
+- A **route handler** that fetches an upstream image, runs a small set of transforms via **Sharp**, and caches results on disk. It's a plain `(req: Request) => Promise<Response>`, so it drops into any framework whose routes speak the Web Fetch API.
 - A **URL builder** that creates transform URLs you can use from your app.
+
+> On Next.js specifically, this is an alternative to the built-in image optimization (`next/image` + the `/_next/image` optimizer), which is intentionally **constrained and opinionated**.
 
 This tends to work best on managed app hosting where you run a Node runtime and can put a CDN in front:
 
@@ -15,12 +17,14 @@ This tends to work best on managed app hosting where you run a Node runtime and 
 - Google Cloud Run (often fronted by Cloud CDN)
 - Any setup fronted by Cloudflare / Fastly / etc.
 
-### Installation (Next.js App Router)
+### Installation
+
+The examples below use the Next.js App Router; see the collapsible section in step 2 for TanStack Start and other frameworks.
 
 #### 1) Install:
 
 ```bash
-yarn add next-image-transformer sharp
+yarn add runtime-image-transformer sharp
 ```
 
 #### 2) Add a route handler
@@ -30,7 +34,7 @@ Create a [route handler](https://nextjs.org/docs/app/getting-started/route-handl
 ```ts
 // src/app/api/image/route.ts
 
-import { createImageTransformRouteHandler } from "next-image-transformer/server";
+import { createImageTransformRouteHandler } from "runtime-image-transformer/server";
 
 export const runtime = "nodejs";
 
@@ -43,12 +47,37 @@ const handler = createImageTransformRouteHandler({
 export const GET = handler;
 ```
 
+<details>
+<summary><strong>TanStack Start</strong> (or any other Web-standard framework)</summary>
+
+The handler is a plain `(req: Request) => Promise<Response>`. TanStack Start server routes hand you a context object, so unwrap `request` in a one-line adapter:
+
+```ts
+// src/routes/api/image.ts
+
+import { createServerFileRoute } from "@tanstack/react-start/server";
+import { createImageTransformRouteHandler } from "runtime-image-transformer/server";
+
+const handler = createImageTransformRouteHandler({
+  apiRouteUrl:
+    process.env.IMAGE_TRANSFORM_API_URL ?? "http://localhost:3000/api/image",
+});
+
+export const ServerRoute = createServerFileRoute().methods({
+  GET: ({ request }) => handler(request),
+});
+```
+
+The same pattern works for Hono, Remix, SvelteKit, and bare `Request`-based servers.
+
+</details>
+
 #### 3) Create a URL builder module
 
 Create a helper for example: `src/lib/imageUrlBuilder.ts`
 
 ```ts
-import { createImageUrlBuilder } from "next-image-transformer";
+import { createImageUrlBuilder } from "runtime-image-transformer";
 
 export const imageUrlBuilder = createImageUrlBuilder({
   // Same absolute URL as the route above, but safe to expose publicly
@@ -86,9 +115,9 @@ export function MyImage() {
 
 #### `createImageTransformRouteHandler(options)`
 
-Import from: `next-image-transformer/server`
+Import from: `runtime-image-transformer/server`
 
-Returns: `(req: Request) => Promise<Response>` (compatible with Next.js Route Handlers)
+Returns: `(req: Request) => Promise<Response>` (a Web Fetch handler — compatible with Next.js Route Handlers, TanStack Start server routes, etc.)
 
 **Options**
 
@@ -120,7 +149,7 @@ Returns: `(req: Request) => Promise<Response>` (compatible with Next.js Route Ha
 
 #### `createImageUrlBuilder(options)`
 
-Import from: `next-image-transformer`
+Import from: `runtime-image-transformer`
 
 Returns: a function `(config: TransformConfig) => string` that builds a transform URL.
 
