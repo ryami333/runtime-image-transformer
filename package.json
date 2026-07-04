@@ -26,11 +26,14 @@
   ],
   "packageManager": "yarn@4.17.0",
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/node": "24.13.2",
+    "eslint": "^10.5.0",
     "prettier": "^3.8.4",
     "release-it": "^20.2.0",
     "sharp": "^0.35.1",
     "typescript": "^6.0.3",
+    "typescript-eslint": "^8.62.1",
     "vite": "^8.0.16"
   },
   "dependencies": {
@@ -48,6 +51,7 @@
   },
   "scripts": {
     "build": "vite build && tsc",
+    "lint": "eslint .",
     "release": "release-it"
   }
 }
