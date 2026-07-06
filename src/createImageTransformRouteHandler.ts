@@ -46,7 +46,7 @@ export const createImageTransformRouteHandler = ({
   /**
    * Cache backend for transformed images. Supply a {@link CachePlugin} — an
    * object with async `read(key)` / `write(key, entry)` methods — to control
-   * where results are stored: the on-disk `createFileSystemCache`, or a
+   * where results are stored: the on-disk `createFileSystemCachePlugin`, or a
    * shared/remote store (e.g. S3-compatible object storage) via your own
    * implementation.
    *

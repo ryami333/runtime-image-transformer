@@ -136,8 +136,8 @@ Returns: `(req: Request) => Promise<Response>` (a Web Fetch handler — compatib
   - **Description**: The [Sharp](https://sharp.pixelplumbing.com/) factory (the module's default export). Sharp is a **peer dependency**, not bundled: install it in your app and pass the instance in (`import sharp from "sharp"`). This lets your app pin Sharp's version and apply any global configuration (concurrency, SIMD, a custom/self-hosted build) before handing it over.
   - **Default**: none (required)
 - **`cachePlugin`**: [`CachePlugin`](#cacheplugin) (optional)
-  - **Description**: Cache backend for transformed images. A `CachePlugin` is an object with async `read(key)` / `write(key, entry)` methods, so you can back the cache with whatever store you like — the on-disk [`createFileSystemCache`](#createfilesystemcacheoptions), or a shared/remote store such as S3-compatible object storage. See [`createFileSystemCache`](#createfilesystemcacheoptions) and [`CachePlugin`](#cacheplugin).
-  - **Default**: `undefined` — **server-side caching is disabled**, and every request is transformed from the upstream source. Omit `cachePlugin` on runtimes without a writable/persistent filesystem (e.g. workers), or when a CDN in front of the handler is expected to do the caching. Pass `createFileSystemCache()` to opt into the on-disk cache.
+  - **Description**: Cache backend for transformed images. A `CachePlugin` is an object with async `read(key)` / `write(key, entry)` methods, so you can back the cache with whatever store you like — the on-disk [`createFileSystemCachePlugin`](#createfilesystemcachepluginoptions), or a shared/remote store such as S3-compatible object storage. See [`createFileSystemCachePlugin`](#createfilesystemcachepluginoptions) and [`CachePlugin`](#cacheplugin).
+  - **Default**: `undefined` — **server-side caching is disabled**, and every request is transformed from the upstream source. Omit `cachePlugin` on runtimes without a writable/persistent filesystem (e.g. workers), or when a CDN in front of the handler is expected to do the caching. Pass `createFileSystemCachePlugin()` to opt into the on-disk cache.
 - **`cacheControl`**: `string` (optional)
   - **Description**: Value for the response `Cache-Control` header.
   - **Default**: `"public, max-age=31536000, immutable"`
@@ -165,9 +165,9 @@ Returns: `(req: Request) => Promise<Response>` (a Web Fetch handler — compatib
   - `fit: "inside"` (or the provided `fit`)
   - `withoutEnlargement: true`
 - **Auto-orient**: Sharp `rotate()` is applied to respect EXIF orientation.
-- **Caching**: disabled by default. Pass a `cachePlugin` to enable it — `createFileSystemCache` writes to disk (so your runtime must have a writable filesystem), or supply a custom [`CachePlugin`](#cacheplugin) to cache elsewhere (e.g. shared object storage). With no `cachePlugin`, every request is transformed fresh — rely on a CDN in front of the handler to absorb load.
+- **Caching**: disabled by default. Pass a `cachePlugin` to enable it — `createFileSystemCachePlugin` writes to disk (so your runtime must have a writable filesystem), or supply a custom [`CachePlugin`](#cacheplugin) to cache elsewhere (e.g. shared object storage). With no `cachePlugin`, every request is transformed fresh — rely on a CDN in front of the handler to absorb load.
 
-#### `createFileSystemCache(options)`
+#### `createFileSystemCachePlugin(options)`
 
 Import from: `runtime-image-transformer/server`
 
@@ -182,14 +182,14 @@ Returns: a [`CachePlugin`](#cacheplugin) that stores transformed images on the l
 ```ts
 import {
   createImageTransformRouteHandler,
-  createFileSystemCache,
+  createFileSystemCachePlugin,
 } from "runtime-image-transformer/server";
 import sharp from "sharp";
 
 const handler = createImageTransformRouteHandler({
   sourceOrigin: "https://images.example.com",
   sharp,
-  cachePlugin: createFileSystemCache({ cacheDir: "/var/cache/images" }),
+  cachePlugin: createFileSystemCachePlugin({ cacheDir: "/var/cache/images" }),
 });
 ```
 

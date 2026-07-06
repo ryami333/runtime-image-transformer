@@ -13,7 +13,7 @@ export type CacheEntry = {
  * The handler derives an opaque, filesystem-safe `key` for each transform and
  * calls `read(key)` before doing any work and `write(key, entry)` after
  * producing a result. Implement this to back the cache with whatever store you
- * like — the on-disk default (`createFileSystemCache`), or a shared/remote
+ * like — the on-disk `createFileSystemCachePlugin`, or a shared/remote
  * store such as S3-compatible object storage, Redis, etc.
  */
 export type CachePlugin = {

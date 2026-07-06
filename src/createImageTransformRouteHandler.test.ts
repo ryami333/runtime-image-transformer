@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import sharp from "sharp";
 import { createImageTransformRouteHandler } from "./createImageTransformRouteHandler";
-import { createFileSystemCache } from "./createFileSystemCache";
+import { createFileSystemCachePlugin } from "./createFileSystemCachePlugin";
 import { createImageUrlBuilder } from "./createImageUrlBuilder";
 import { makePng, stubUpstream } from "./testHelpers";
 import type { CacheEntry, CachePlugin } from "./CachePlugin";
@@ -18,7 +18,7 @@ let cachePlugin: CachePlugin;
 
 beforeEach(async () => {
   cacheDir = await fs.mkdtemp(path.join(os.tmpdir(), "transform-cache-"));
-  cachePlugin = createFileSystemCache({ cacheDir });
+  cachePlugin = createFileSystemCachePlugin({ cacheDir });
 });
 
 afterEach(async () => {
@@ -509,7 +509,7 @@ describe("path traversal", () => {
     const handler = createImageTransformRouteHandler({
       sourceOrigin: SOURCE_ORIGIN,
       sharp,
-      cachePlugin: createFileSystemCache({ cacheDir: nestedCacheDir }),
+      cachePlugin: createFileSystemCachePlugin({ cacheDir: nestedCacheDir }),
     });
 
     // The raw source (with its `../`) is what gets hashed into the cache key, so

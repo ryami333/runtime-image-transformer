@@ -11,11 +11,10 @@ const metaSchema = z.object({ contentType: z.string() }).loose();
  * filesystem under `cacheDir`, sharding by key prefix. Requires a writable
  * filesystem on the runtime.
  *
- * This is what the handler uses when no `cachePlugin` is supplied. Construct one
- * explicitly to point it at a specific directory, or use it as a template for
- * your own backend.
+ * Pass the result as the handler's `cachePlugin` to enable on-disk caching, or
+ * use it as a template for your own backend.
  */
-export function createFileSystemCache({
+export function createFileSystemCachePlugin({
   cacheDir = path.join(process.cwd(), ".transform-cache"),
 }: {
   /**

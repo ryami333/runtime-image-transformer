@@ -1,3 +1,3 @@
 export { createImageTransformRouteHandler } from "./createImageTransformRouteHandler";
-export { createFileSystemCache } from "./createFileSystemCache";
+export { createFileSystemCachePlugin } from "./createFileSystemCachePlugin";
 export type { CachePlugin, CacheEntry } from "./CachePlugin";
