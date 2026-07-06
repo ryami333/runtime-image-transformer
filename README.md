@@ -42,8 +42,7 @@ export const runtime = "nodejs";
 const handler = createImageTransformRouteHandler({
   // Required. The trusted origin that `source` paths are fetched from. Callers
   // can only ever request paths under this origin, which is the SSRF protection.
-  sourceOrigin:
-    process.env.IMAGE_SOURCE_ORIGIN ?? "https://images.example.com",
+  sourceOrigin: process.env.IMAGE_SOURCE_ORIGIN ?? "https://images.example.com",
   // Required. Sharp is a peer dependency — install it and pass the instance in.
   sharp,
 });
@@ -65,8 +64,7 @@ import sharp from "sharp";
 
 const handler = createImageTransformRouteHandler({
   // Required. The trusted origin that `source` paths are fetched from.
-  sourceOrigin:
-    process.env.IMAGE_SOURCE_ORIGIN ?? "https://images.example.com",
+  sourceOrigin: process.env.IMAGE_SOURCE_ORIGIN ?? "https://images.example.com",
   // Required. Sharp is a peer dependency — install it and pass the instance in.
   sharp,
 });
