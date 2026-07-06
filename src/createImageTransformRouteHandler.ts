@@ -16,7 +16,7 @@ import type { Sharp, SharpConstructor } from "sharp";
 export const createImageTransformRouteHandler = ({
   sourceOrigin,
   sharp,
-  cache,
+  cachePlugin,
   cacheControl = "public, max-age=31536000, immutable",
   maxSourceBytes = 20 * 1024 * 1024,
   maxInputPixels = 3840 * 3840,
@@ -57,7 +57,7 @@ export const createImageTransformRouteHandler = ({
    *
    * @default undefined (no server-side cache)
    */
-  cache?: CachePlugin;
+  cachePlugin?: CachePlugin;
   cacheControl?: string;
   /**
    * Maximum size, in bytes, of an upstream source image the handler will
@@ -169,7 +169,7 @@ export const createImageTransformRouteHandler = ({
     const quality = transformConfig.q ?? 100;
 
     const cacheKey = getTransformCacheKey({ canonicalUrl });
-    const cached = await cache?.read(cacheKey);
+    const cached = await cachePlugin?.read(cacheKey);
     if (cached) {
       return new Response(cached.body, {
         headers: {
@@ -320,7 +320,7 @@ export const createImageTransformRouteHandler = ({
       }
     })();
 
-    await cache?.write(cacheKey, { body: out, contentType });
+    await cachePlugin?.write(cacheKey, { body: out, contentType });
 
     return new Response(body, {
       headers: {

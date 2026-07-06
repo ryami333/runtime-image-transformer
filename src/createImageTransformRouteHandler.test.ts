@@ -14,11 +14,11 @@ const SOURCE_ORIGIN = "https://origin.test";
 const buildUrl = createImageUrlBuilder({ apiRouteUrl: API });
 
 let cacheDir: string;
-let cache: CachePlugin;
+let cachePlugin: CachePlugin;
 
 beforeEach(async () => {
   cacheDir = await fs.mkdtemp(path.join(os.tmpdir(), "transform-cache-"));
-  cache = createFileSystemCache({ cacheDir });
+  cachePlugin = createFileSystemCache({ cacheDir });
 });
 
 afterEach(async () => {
@@ -33,7 +33,7 @@ const makeHandler = () =>
   createImageTransformRouteHandler({
     sourceOrigin: SOURCE_ORIGIN,
     sharp,
-    cache,
+    cachePlugin,
   });
 
 describe("happy path", () => {
@@ -68,7 +68,7 @@ describe("happy path", () => {
     const handler = createImageTransformRouteHandler({
       sourceOrigin: SOURCE_ORIGIN,
       sharp,
-      cache,
+      cachePlugin,
       allowedFormats: ["jpeg", "png", "webp", "avif", "gif", "tiff"],
     });
 
@@ -271,7 +271,7 @@ describe("allowedFormats", () => {
     const handler = createImageTransformRouteHandler({
       sourceOrigin: SOURCE_ORIGIN,
       sharp,
-      cache,
+      cachePlugin,
       allowedFormats: ["preserve", "webp", "avif", "gif"],
     });
 
@@ -286,7 +286,7 @@ describe("allowedFormats", () => {
     const handler = createImageTransformRouteHandler({
       sourceOrigin: SOURCE_ORIGIN,
       sharp,
-      cache,
+      cachePlugin,
       allowedFormats: ["webp", "avif"],
     });
 
@@ -305,7 +305,7 @@ describe("maxSourceBytes", () => {
     const handler = createImageTransformRouteHandler({
       sourceOrigin: SOURCE_ORIGIN,
       sharp,
-      cache,
+      cachePlugin,
       maxSourceBytes: 10,
     });
 
@@ -333,7 +333,7 @@ describe("maxSourceBytes", () => {
     const handler = createImageTransformRouteHandler({
       sourceOrigin: SOURCE_ORIGIN,
       sharp,
-      cache,
+      cachePlugin,
       maxSourceBytes: 1024,
     });
 
@@ -346,7 +346,7 @@ describe("maxSourceBytes", () => {
     const handler = createImageTransformRouteHandler({
       sourceOrigin: SOURCE_ORIGIN,
       sharp,
-      cache,
+      cachePlugin,
       maxSourceBytes: 10 * 1024 * 1024,
     });
 
@@ -363,7 +363,7 @@ describe("maxInputPixels", () => {
     const handler = createImageTransformRouteHandler({
       sourceOrigin: SOURCE_ORIGIN,
       sharp,
-      cache,
+      cachePlugin,
       maxInputPixels: 1000,
     });
 
@@ -413,7 +413,7 @@ describe("fetch timeout", () => {
     const handler = createImageTransformRouteHandler({
       sourceOrigin: SOURCE_ORIGIN,
       sharp,
-      cache,
+      cachePlugin,
       fetchTimeoutMs: 20,
     });
 
@@ -445,7 +445,7 @@ describe("sourceOrigin validation", () => {
       createImageTransformRouteHandler({
         sourceOrigin: "/images",
         sharp,
-        cache,
+        cachePlugin,
       }),
     ).toThrow(/absolute/);
   });
@@ -455,7 +455,7 @@ describe("sourceOrigin validation", () => {
       createImageTransformRouteHandler({
         sourceOrigin: "ftp://origin.test",
         sharp,
-        cache,
+        cachePlugin,
       }),
     ).toThrow(/http/);
   });
@@ -509,7 +509,7 @@ describe("path traversal", () => {
     const handler = createImageTransformRouteHandler({
       sourceOrigin: SOURCE_ORIGIN,
       sharp,
-      cache: createFileSystemCache({ cacheDir: nestedCacheDir }),
+      cachePlugin: createFileSystemCache({ cacheDir: nestedCacheDir }),
     });
 
     // The raw source (with its `../`) is what gets hashed into the cache key, so
@@ -553,7 +553,7 @@ describe("custom cache plugin", () => {
   it("reads from and writes to a supplied CachePlugin", async () => {
     const store = new Map<string, CacheEntry>();
     const reads: string[] = [];
-    const cache: CachePlugin = {
+    const cachePlugin: CachePlugin = {
       read: async (key) => {
         reads.push(key);
         return store.get(key) ?? null;
@@ -567,7 +567,7 @@ describe("custom cache plugin", () => {
     const handler = createImageTransformRouteHandler({
       sourceOrigin: SOURCE_ORIGIN,
       sharp,
-      cache,
+      cachePlugin,
     });
     const send = () => handler(req({ source: "/a.png", fmt: "webp" }));
 
