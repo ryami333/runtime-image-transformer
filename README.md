@@ -39,9 +39,10 @@ import { createImageTransformRouteHandler } from "runtime-image-transformer/serv
 export const runtime = "nodejs";
 
 const handler = createImageTransformRouteHandler({
-  // Must be an absolute URL. This is used to build a canonical URL for caching.
-  apiRouteUrl:
-    process.env.IMAGE_TRANSFORM_API_URL ?? "http://localhost:3000/api/image",
+  // Required. The trusted origin that `source` paths are fetched from. Callers
+  // can only ever request paths under this origin, which is the SSRF protection.
+  sourceOrigin:
+    process.env.IMAGE_SOURCE_ORIGIN ?? "https://images.example.com",
 });
 
 export const GET = handler;
@@ -59,8 +60,9 @@ import { createServerFileRoute } from "@tanstack/react-start/server";
 import { createImageTransformRouteHandler } from "runtime-image-transformer/server";
 
 const handler = createImageTransformRouteHandler({
-  apiRouteUrl:
-    process.env.IMAGE_TRANSFORM_API_URL ?? "http://localhost:3000/api/image",
+  // Required. The trusted origin that `source` paths are fetched from.
+  sourceOrigin:
+    process.env.IMAGE_SOURCE_ORIGIN ?? "https://images.example.com",
 });
 
 export const ServerRoute = createServerFileRoute().methods({
@@ -80,11 +82,11 @@ Create a helper for example: `src/lib/imageUrlBuilder.ts`
 import { createImageUrlBuilder } from "runtime-image-transformer";
 
 export const imageUrlBuilder = createImageUrlBuilder({
-  // Same absolute URL as the route above, but safe to expose publicly
-  // if you want to build URLs client-side.
-  apiRouteUrl:
-    process.env.NEXT_PUBLIC_IMAGE_TRANSFORM_API_URL ??
-    "http://localhost:3000/api/image",
+  // The path of the route above. A root-relative path is recommended: the
+  // builder then emits root-relative URLs, so there's no origin to configure at
+  // build time (and nothing to expose client-side). An absolute URL — e.g. a
+  // CDN-hosted route — also works.
+  apiRouteUrl: "/api/image",
 });
 ```
 
@@ -101,7 +103,8 @@ export function MyImage() {
   return (
     <img
       src={imageUrlBuilder({
-        source: "https://images.example.com/cat.jpg",
+        // A path, resolved server-side against the handler's `sourceOrigin`.
+        source: "/cat.jpg",
         fmt: "webp",
         w: 800,
         q: 80,
@@ -121,21 +124,18 @@ Returns: `(req: Request) => Promise<Response>` (a Web Fetch handler — compatib
 
 **Options**
 
-- **`apiRouteUrl`**: `string` (required)
-  - **Description**: Absolute URL for the transform route (used to generate a canonical URL for caching).
-  - **Default**: none
+- **`sourceOrigin`**: `string` (**required**)
+  - **Description**: The trusted, absolute origin that `source` paths are resolved and fetched against, e.g. `"https://images.example.com"`. This is the handler's [SSRF](https://owasp.org/www-community/attacks/Server_Side_Request_Forgery) protection: because `source` is always a **path** joined to this fixed, server-side origin, callers can never make the server fetch an arbitrary host. Any `source` that resolves off-origin (an absolute URL, or a protocol-relative `//host` value) is rejected with `400`.
+  - **Note**: This is intentionally not derived from the incoming request — the `Host` header is attacker-controlled, so trusting it would reintroduce SSRF and enable cache poisoning.
+  - **Default**: none (required; must be an `http(s)` URL or the handler throws at construction)
 - **`cacheDir`**: `string` (optional)
   - **Description**: Directory on disk where transformed images are cached.
   - **Default**: `path.join(process.cwd(), ".transform-cache")`
 - **`cacheControl`**: `string` (optional)
   - **Description**: Value for the response `Cache-Control` header.
   - **Default**: `"public, max-age=31536000, immutable"`
-- **`allowedHosts`**: `Array<string | RegExp>` (optional)
-  - **Description**: Allowlist for the upstream `source` URL host. If omitted, **all hosts are allowed**.
-    - Exact host: `"images.example.com"`
-    - Host + port: `"localhost:3000"`
-    - RegExp: `/^(?:.+\.)?example\.com$/` (tested against both `hostname` and `host`)
-  - **Default**: `undefined` (allow all)
+
+> **Note**: Upstream redirects are **not** followed (`redirect: "manual"`). A redirect is treated as a failed fetch (`502`) so it can't be used to bounce the server off `sourceOrigin` to an internal address.
 
 **Behavior notes**
 
@@ -156,7 +156,7 @@ Returns: a function `(config: TransformConfig) => string` that builds a transfor
 **Options**
 
 - **`apiRouteUrl`**: `string` (required)
-  - **Description**: Absolute URL for your transform route.
+  - **Description**: The transform route. Usually a root-relative path like `"/api/image"` (the builder then emits root-relative URLs, so no origin is needed at build time). An absolute URL also works.
   - **Default**: none
 
 ### Transform config + query parameters
@@ -164,7 +164,7 @@ Returns: a function `(config: TransformConfig) => string` that builds a transfor
 The transform URL uses these query params:
 
 - **`source`**: `string` (required)
-  - Absolute `http(s)` URL to the upstream image.
+  - A path to the upstream image, e.g. `"/photos/cat.jpg"`. Resolved server-side against the handler's `sourceOrigin`; values that resolve to a different origin are rejected.
 - **`fmt`**: `"preserve" | "webp" | "avif"` (optional)
   - If omitted, it defaults to `"preserve"`.
 - **`w`**: `number` (optional)

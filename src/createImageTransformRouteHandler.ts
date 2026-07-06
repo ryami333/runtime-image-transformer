@@ -1,5 +1,5 @@
 import path from "node:path";
-import { createImageUrlCodec } from "./createImageUrlCodec";
+import { searchParamsToTransformConfigCodec } from "./searchParamsToTransformConfigCodec";
 import { getTransformCacheKey } from "./getTransformCacheKey";
 import { readTransformCache } from "./readTransformCache";
 import Sharp from "sharp";
@@ -7,60 +7,79 @@ import { pipe } from "fp-ts/function";
 import { writeTransformCache } from "./writeTransformCache";
 
 export const createImageTransformRouteHandler = ({
-  apiRouteUrl,
+  sourceOrigin,
   cacheDir = path.join(process.cwd(), ".transform-cache"),
   cacheControl = "public, max-age=31536000, immutable",
-  allowedHosts,
 }: {
-  apiRouteUrl: string;
+  /**
+   * Trusted origin that `source` paths are resolved against, e.g.
+   * `"https://images.example.com"`.
+   *
+   * This is server-side configuration and is intentionally **not** derived from
+   * the incoming request (the `Host` header is attacker-controlled). Because the
+   * fetch target is always a path under this fixed origin, callers cannot point
+   * the handler at arbitrary hosts — this is the handler's SSRF protection.
+   */
+  sourceOrigin: string;
   cacheDir?: string;
   cacheControl?: string;
-  /**
-   * Optional allowlist for the `source` URL's host.
-   *
-   * - Exact matches: `"images.example.com"`
-   * - Host + port: `"localhost:3000"`
-   * - RegExp: `/^(?:.+\\.)?example\\.com$/` (tested against hostname and host)
-   *
-   * If omitted, all hosts are allowed (current behavior).
-   */
-  allowedHosts?: Array<string | RegExp>;
 }) => {
-  const urlStringToTransformConfig = createImageUrlCodec({ apiRouteUrl });
+  let origin: URL;
+  try {
+    origin = new URL(sourceOrigin);
+  } catch {
+    throw new Error(
+      "createImageTransformRouteHandler: `sourceOrigin` must be an absolute " +
+        `URL (got ${JSON.stringify(sourceOrigin)}).`,
+    );
+  }
+  if (origin.protocol !== "http:" && origin.protocol !== "https:") {
+    throw new Error(
+      "createImageTransformRouteHandler: `sourceOrigin` must be an http(s) URL.",
+    );
+  }
 
-  const isAllowedSourceUrl = (sourceUrl: URL) => {
-    if (!allowedHosts) return true;
-
-    const hostname = sourceUrl.hostname.toLowerCase();
-    const host = sourceUrl.host.toLowerCase(); // includes port if present
-
-    return allowedHosts.some((pattern) => {
-      if (pattern instanceof RegExp) {
-        return pattern.test(hostname) || pattern.test(host);
-      }
-
-      const normalized = pattern.toLowerCase();
-      return normalized.includes(":")
-        ? host === normalized
-        : hostname === normalized;
-    });
+  // The codec's `decode` throws for missing/invalid params (e.g. a missing
+  // `source`); `safeDecode` reports schema issues via `error`. Handle both so
+  // bad input always yields a 400 rather than a 500.
+  const decodeConfig = (reqUrl: string) => {
+    try {
+      const { searchParams } = new URL(reqUrl);
+      const { data, error } =
+        searchParamsToTransformConfigCodec.safeDecode(searchParams);
+      return error ? null : data;
+    } catch {
+      return null;
+    }
   };
 
   return async function handler(req: Request): Promise<Response> {
-    const { data: transformConfig, error } =
-      urlStringToTransformConfig.safeDecode(req.url);
+    const transformConfig = decodeConfig(req.url);
 
-    if (error) {
+    if (!transformConfig) {
       return new Response("Bad Request", { status: 400 });
     }
 
-    // Canonical (re-encoded) URL so cache hits even if the original request
-    // contains superfluous/unknown query params.
-    const canonicalUrl = urlStringToTransformConfig.encode(
-      // encode() accepts the decoded transform config shape; we only call this
-      // after decoding has succeeded.
-      transformConfig,
-    );
+    // Resolve the requested path against the trusted origin. Resolving against a
+    // fixed base means an absolute or protocol-relative `source` (e.g.
+    // `"//evil.com/x"` or `"https://evil.com/x"`) lands on a different origin,
+    // which we reject: the fetch target can only ever be a path under
+    // `sourceOrigin`.
+    let sourceUrl: URL;
+    try {
+      sourceUrl = new URL(transformConfig.source, origin);
+    } catch {
+      return new Response("Bad Request", { status: 400 });
+    }
+    if (sourceUrl.origin !== origin.origin) {
+      return new Response("Bad Request", { status: 400 });
+    }
+
+    // Canonical (re-encoded) query so cache hits even if the original request
+    // carries superfluous/unknown params or a different param order.
+    const canonicalUrl = searchParamsToTransformConfigCodec
+      .encode(transformConfig)
+      .toString();
 
     const quality = transformConfig.q ?? 100;
 
@@ -75,26 +94,10 @@ export const createImageTransformRouteHandler = ({
       });
     }
 
-    let sourceUrl: URL;
-    try {
-      sourceUrl = new URL(transformConfig.source);
-    } catch {
-      return new Response("Bad Request", { status: 400 });
-    }
-
-    if (sourceUrl.protocol !== "http:" && sourceUrl.protocol !== "https:") {
-      return new Response("Bad Request", { status: 400 });
-    }
-
-    if (sourceUrl.username || sourceUrl.password) {
-      return new Response("Bad Request", { status: 400 });
-    }
-
-    if (!isAllowedSourceUrl(sourceUrl)) {
-      return new Response("Forbidden", { status: 403 });
-    }
-
-    const upstream = await fetch(sourceUrl);
+    // `redirect: "manual"` prevents the upstream from bouncing the server
+    // off-origin (e.g. to an internal address); a redirect surfaces here as a
+    // non-ok response and is treated as a failed fetch.
+    const upstream = await fetch(sourceUrl, { redirect: "manual" });
     if (!upstream.ok)
       return new Response("Upstream fetch failed", { status: 502 });
 

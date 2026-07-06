@@ -8,6 +8,7 @@ import { createImageUrlBuilder } from "./createImageUrlBuilder";
 import { makePng, stubUpstream } from "./testHelpers";
 
 const API = "https://cdn.example.com/_image";
+const SOURCE_ORIGIN = "https://origin.test";
 const buildUrl = createImageUrlBuilder({ apiRouteUrl: API });
 
 let cacheDir: string;
@@ -24,17 +25,15 @@ afterEach(async () => {
 const req = (config: Parameters<typeof buildUrl>[0]) =>
   new Request(buildUrl(config));
 
+const makeHandler = () =>
+  createImageTransformRouteHandler({ sourceOrigin: SOURCE_ORIGIN, cacheDir });
+
 describe("happy path", () => {
   it("resizes and converts to webp", async () => {
     stubUpstream(await makePng(200, 200));
-    const handler = createImageTransformRouteHandler({
-      apiRouteUrl: API,
-      cacheDir,
-    });
+    const handler = makeHandler();
 
-    const res = await handler(
-      req({ source: "https://origin.test/a.png", w: 50, fmt: "webp" }),
-    );
+    const res = await handler(req({ source: "/a.png", w: 50, fmt: "webp" }));
 
     expect(res.status).toBe(200);
     expect(res.headers.get("Content-Type")).toBe("image/webp");
@@ -47,16 +46,21 @@ describe("happy path", () => {
     expect(meta.width).toBe(50); // withoutEnlargement + inside fit
   });
 
+  it("resolves the source path against sourceOrigin", async () => {
+    const fetchMock = stubUpstream(await makePng());
+    const handler = makeHandler();
+
+    await handler(req({ source: "/nested/a.png", fmt: "webp" }));
+
+    const fetchedUrl = String((fetchMock.mock.calls[0] as unknown[])[0]);
+    expect(fetchedUrl).toBe("https://origin.test/nested/a.png");
+  });
+
   it("does not enlarge images past their source size", async () => {
     stubUpstream(await makePng(40, 40));
-    const handler = createImageTransformRouteHandler({
-      apiRouteUrl: API,
-      cacheDir,
-    });
+    const handler = makeHandler();
 
-    const res = await handler(
-      req({ source: "https://origin.test/small.png", w: 500, fmt: "webp" }),
-    );
+    const res = await handler(req({ source: "/small.png", w: 500, fmt: "webp" }));
 
     const meta = await sharp(Buffer.from(await res.arrayBuffer())).metadata();
     expect(meta.width).toBe(40);
@@ -64,14 +68,9 @@ describe("happy path", () => {
 
   it("preserves the upstream content type when fmt is preserve", async () => {
     stubUpstream(await makePng(), "image/png");
-    const handler = createImageTransformRouteHandler({
-      apiRouteUrl: API,
-      cacheDir,
-    });
+    const handler = makeHandler();
 
-    const res = await handler(
-      req({ source: "https://origin.test/a.png", fmt: "preserve" }),
-    );
+    const res = await handler(req({ source: "/a.png", fmt: "preserve" }));
 
     expect(res.status).toBe(200);
     expect(res.headers.get("Content-Type")).toBe("image/png");
@@ -79,12 +78,8 @@ describe("happy path", () => {
 
   it("caches: a second request does not hit upstream", async () => {
     const fetchMock = stubUpstream(await makePng());
-    const handler = createImageTransformRouteHandler({
-      apiRouteUrl: API,
-      cacheDir,
-    });
-    const send = () =>
-      handler(req({ source: "https://origin.test/a.png", fmt: "webp" }));
+    const handler = makeHandler();
+    const send = () => handler(req({ source: "/a.png", fmt: "webp" }));
 
     const first = await send();
     const second = await send();
@@ -97,24 +92,23 @@ describe("happy path", () => {
 });
 
 describe("rejects bad input", () => {
-  const makeHandler = () =>
-    createImageTransformRouteHandler({ apiRouteUrl: API, cacheDir });
-
   it("400 when the request URL is not the transform route", async () => {
     const res = await makeHandler()(new Request("https://x/not-the-route"));
     expect(res.status).toBe(400);
   });
 
-  it("400 on a non-http(s) source", async () => {
+  it("400 on an absolute (cross-origin) source", async () => {
+    stubUpstream(await makePng());
     const res = await makeHandler()(
-      req({ source: "ftp://origin.test/a.png", fmt: "webp" }),
+      req({ source: "https://evil.test/a.png", fmt: "webp" }),
     );
     expect(res.status).toBe(400);
   });
 
-  it("400 when the source URL carries credentials", async () => {
+  it("400 on a protocol-relative source", async () => {
+    stubUpstream(await makePng());
     const res = await makeHandler()(
-      req({ source: "https://user:pass@origin.test/a.png", fmt: "webp" }),
+      req({ source: "//evil.test/a.png", fmt: "webp" }),
     );
     expect(res.status).toBe(400);
   });
@@ -124,61 +118,58 @@ describe("rejects bad input", () => {
       "fetch",
       vi.fn(async () => new Response("nope", { status: 404 })),
     );
-    const res = await makeHandler()(
-      req({ source: "https://origin.test/a.png", fmt: "webp" }),
-    );
+    const res = await makeHandler()(req({ source: "/a.png", fmt: "webp" }));
     expect(res.status).toBe(502);
   });
 });
 
-describe("allowedHosts", () => {
-  it("403 when the source host is not allowlisted", async () => {
-    stubUpstream(await makePng());
-    const handler = createImageTransformRouteHandler({
-      apiRouteUrl: API,
-      cacheDir,
-      allowedHosts: ["images.example.com"],
-    });
-
-    const res = await handler(
-      req({ source: "https://evil.test/a.png", fmt: "webp" }),
-    );
-    expect(res.status).toBe(403);
+describe("sourceOrigin validation", () => {
+  it("throws when sourceOrigin is not an absolute URL", () => {
+    expect(() =>
+      createImageTransformRouteHandler({ sourceOrigin: "/images", cacheDir }),
+    ).toThrow(/absolute/);
   });
 
-  it("200 when the source host matches an allowlist entry", async () => {
-    stubUpstream(await makePng());
-    const handler = createImageTransformRouteHandler({
-      apiRouteUrl: API,
-      cacheDir,
-      allowedHosts: ["images.example.com"],
-    });
-
-    const res = await handler(
-      req({ source: "https://images.example.com/a.png", fmt: "webp" }),
-    );
-    expect(res.status).toBe(200);
+  it("throws when sourceOrigin is not http(s)", () => {
+    expect(() =>
+      createImageTransformRouteHandler({
+        sourceOrigin: "ftp://origin.test",
+        cacheDir,
+      }),
+    ).toThrow(/http/);
   });
+});
 
-  it("serves a cached entry even if the host is no longer allowlisted", async () => {
-    // Documents current behaviour: the cache lookup happens before the
-    // allowedHosts check, so a previously-cached transform is still served.
-    stubUpstream(await makePng());
-    const source = "https://images.example.com/a.png";
+describe("SSRF: upstream redirects are not followed", () => {
+  it("passes redirect: manual to fetch and rejects a redirected upstream", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(null, {
+          status: 302,
+          headers: { location: "http://169.254.169.254/latest/meta-data/" },
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
 
-    const permissive = createImageTransformRouteHandler({
-      apiRouteUrl: API,
-      cacheDir,
-    });
-    const primed = await permissive(req({ source, fmt: "webp" }));
-    expect(primed.status).toBe(200);
+    const res = await makeHandler()(req({ source: "/a.png", fmt: "webp" }));
 
-    const restricted = createImageTransformRouteHandler({
-      apiRouteUrl: API,
-      cacheDir,
-      allowedHosts: ["other.example.com"],
-    });
-    const res = await restricted(req({ source, fmt: "webp" }));
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(502);
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ redirect: "manual" }),
+    );
+  });
+});
+
+describe("createImageUrlBuilder", () => {
+  it("emits a root-relative URL when given a path route", () => {
+    const build = createImageUrlBuilder({ apiRouteUrl: "/api/image" });
+    const url = build({ source: "/cat.jpg", w: 800, fmt: "webp" });
+
+    expect(url.startsWith("/api/image?")).toBe(true);
+    const params = new URL(url, "http://x").searchParams;
+    expect(params.get("source")).toBe("/cat.jpg");
+    expect(params.get("w")).toBe("800");
+    expect(params.get("fmt")).toBe("webp");
   });
 });
