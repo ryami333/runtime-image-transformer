@@ -104,6 +104,16 @@ describe("happy path", () => {
     expect(res.headers.get("Content-Type")).toBe("image/png");
   });
 
+  it("accepts preserve when the image content type has odd casing or params", async () => {
+    // The guard normalizes before matching, so a legitimate image labelled
+    // `IMAGE/PNG; charset=binary` must not be falsely rejected.
+    stubUpstream(await makePng(), "IMAGE/PNG; charset=binary");
+    const res = await makeHandler()(req({ source: "/a.png", fmt: "preserve" }));
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Type")).toBe("IMAGE/PNG; charset=binary");
+  });
+
   it("sends X-Content-Type-Options: nosniff on fresh and cached responses", async () => {
     stubUpstream(await makePng());
     const handler = makeHandler();
@@ -162,6 +172,42 @@ describe("rejects bad input", () => {
     stubUpstream(await makePng());
     const res = await makeHandler()(
       req({ source: "//evil.test/a.png", fmt: "webp" }),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it("400 on a file: source (opaque origin)", async () => {
+    stubUpstream(await makePng());
+    const res = await makeHandler()(
+      req({ source: "file:///etc/passwd", fmt: "webp" }),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it("400 on a data: source", async () => {
+    stubUpstream(await makePng());
+    const res = await makeHandler()(
+      req({ source: "data:text/html,<script>alert(1)</script>", fmt: "webp" }),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it("400 on a userinfo-smuggled cross-origin source", async () => {
+    // `origin.test@evil.test` parses with host evil.test — the origin check must
+    // compare the real host, not be fooled by the userinfo prefix.
+    stubUpstream(await makePng());
+    const res = await makeHandler()(
+      req({ source: "https://origin.test@evil.test/a.png", fmt: "webp" }),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it("400 on a same-host but different-port source", async () => {
+    // The guard is origin equality (scheme + host + port), so a different port
+    // is off-origin even though the host matches.
+    stubUpstream(await makePng());
+    const res = await makeHandler()(
+      req({ source: "https://origin.test:1234/a.png", fmt: "webp" }),
     );
     expect(res.status).toBe(400);
   });
@@ -412,6 +458,54 @@ describe("SSRF: upstream redirects are not followed", () => {
       expect.anything(),
       expect.objectContaining({ redirect: "manual" }),
     );
+  });
+});
+
+describe("path traversal", () => {
+  it("collapses ../ in the source onto the trusted origin's root", async () => {
+    const fetchMock = stubUpstream(await makePng());
+
+    const res = await makeHandler()(
+      req({ source: "/../../../etc/passwd", fmt: "webp" }),
+    );
+
+    // URL normalization eats the `..` segments: the fetch target stays under
+    // sourceOrigin and can never climb above its root.
+    expect(res.status).toBe(200);
+    const fetchedUrl = String((fetchMock.mock.calls[0] as unknown[])[0]);
+    expect(fetchedUrl).toBe("https://origin.test/etc/passwd");
+  });
+
+  it("does not write cache files outside cacheDir for a hostile source", async () => {
+    // A root we fully control: cacheDir is a nested subdir, and `outside` is a
+    // sibling a traversal write would have to escape into.
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "traversal-"));
+    const nestedCacheDir = path.join(root, "cache");
+    const outside = path.join(root, "outside");
+    await fs.mkdir(outside, { recursive: true });
+
+    stubUpstream(await makePng());
+    const handler = createImageTransformRouteHandler({
+      sourceOrigin: SOURCE_ORIGIN,
+      cacheDir: nestedCacheDir,
+    });
+
+    // The raw source (with its `../`) is what gets hashed into the cache key, so
+    // this is the exact string a traversal attack would rely on.
+    const res = await handler(
+      req({ source: "/../../../../outside/pwned", fmt: "webp" }),
+    );
+    expect(res.status).toBe(200);
+
+    // The sibling dir is untouched — nothing escaped the cache root...
+    expect(await fs.readdir(outside)).toEqual([]);
+
+    // ...and the response really was cached (so the assertion above isn't
+    // vacuous), entirely under cacheDir.
+    const written = await fs.readdir(nestedCacheDir, { recursive: true });
+    expect(written.some((f) => String(f).endsWith(".bin"))).toBe(true);
+
+    await fs.rm(root, { recursive: true, force: true });
   });
 });
 
