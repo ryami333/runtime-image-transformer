@@ -186,14 +186,27 @@ export const createImageTransformRouteHandler = ({
        */
       (image: Sharp) => {
         switch (transformConfig.fmt) {
+          case undefined:
           case "preserve":
             return image;
-          case "avif":
-            return image.avif({ quality });
+          case "jpeg":
+            return image.jpeg({ quality });
+          case "png":
+            // PNG is lossless; `quality` only applies to palette output, so
+            // there's no meaningful `q` knob to forward here.
+            return image.png();
           case "webp":
             return image.webp({ quality });
+          case "avif":
+            return image.avif({ quality });
+          case "gif":
+            // Sharp's GIF encoder has no `quality` option.
+            return image.gif();
+          case "tiff":
+            return image.tiff({ quality });
           default: {
-            throw new Error(`Unreachable case: ${transformConfig.fmt}`);
+            const _exhaustive: never = transformConfig.fmt;
+            throw new Error(`Unreachable case: ${_exhaustive}`);
           }
         }
       },
@@ -214,13 +227,20 @@ export const createImageTransformRouteHandler = ({
 
     const contentType = (() => {
       switch (transformConfig.fmt) {
-        case "avif": {
-          return "image/avif";
-        }
-        case "webp": {
+        case "jpeg":
+          return "image/jpeg";
+        case "png":
+          return "image/png";
+        case "webp":
           return "image/webp";
-        }
+        case "avif":
+          return "image/avif";
+        case "gif":
+          return "image/gif";
+        case "tiff":
+          return "image/tiff";
         case "preserve":
+        case undefined:
         default: {
           return (
             upstream.headers.get("content-type") ?? "application/octet-stream"

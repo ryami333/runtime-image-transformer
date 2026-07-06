@@ -46,6 +46,30 @@ describe("happy path", () => {
     expect(meta.width).toBe(50); // withoutEnlargement + inside fit
   });
 
+  it.each([
+    // `decodedFormat` is what Sharp reports when re-reading the output, which
+    // isn't always the request name (AVIF is a HEIF-family container).
+    ["jpeg", "image/jpeg", "jpeg"],
+    ["png", "image/png", "png"],
+    ["avif", "image/avif", "heif"],
+    ["gif", "image/gif", "gif"],
+    ["tiff", "image/tiff", "tiff"],
+  ] as const)(
+    "transcodes to %s",
+    async (fmt, contentType, decodedFormat) => {
+      stubUpstream(await makePng(200, 200));
+      const handler = makeHandler();
+
+      const res = await handler(req({ source: "/a.png", fmt }));
+
+      expect(res.status).toBe(200);
+      expect(res.headers.get("Content-Type")).toBe(contentType);
+
+      const meta = await sharp(Buffer.from(await res.arrayBuffer())).metadata();
+      expect(meta.format).toBe(decodedFormat);
+    },
+  );
+
   it("resolves the source path against sourceOrigin", async () => {
     const fetchMock = stubUpstream(await makePng());
     const handler = makeHandler();

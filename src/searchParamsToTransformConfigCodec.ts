@@ -1,5 +1,5 @@
 import z from "zod";
-import { transformConfigSchema } from "./transformConfigSchema";
+import { transformConfigSchema, formatEnum } from "./transformConfigSchema";
 import { notNullish } from "./notNullish";
 import { stringToIntCodec } from "./stringToIntCodec";
 
@@ -32,7 +32,7 @@ export const searchParamsToTransformConfigCodec = z.codec(
               .parse(input.get("fit"))
           : undefined,
         fmt: notNullish(input.get("fmt"))
-          ? z.enum(["preserve", "webp", "avif"]).parse(input.get("fmt"))
+          ? formatEnum.parse(input.get("fmt"))
           : undefined,
         q: notNullish(input.get("q"))
           ? stringToIntCodec.decode(input.get("q") ?? "")

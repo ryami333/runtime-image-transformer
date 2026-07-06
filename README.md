@@ -174,8 +174,9 @@ The transform URL uses these query params:
 
 - **`source`**: `string` (required)
   - A path to the upstream image, e.g. `"/photos/cat.jpg"`. Resolved server-side against the handler's `sourceOrigin`; values that resolve to a different origin are rejected.
-- **`fmt`**: `"preserve" | "webp" | "avif"` (optional)
-  - If omitted, it defaults to `"preserve"`.
+- **`fmt`**: `"preserve" | "jpeg" | "png" | "webp" | "avif" | "gif" | "tiff"` (optional)
+  - If omitted, it defaults to `"preserve"` (the upstream bytes are returned untouched).
+  - `png` and `gif` ignore `q` (PNG is lossless; Sharp's GIF encoder has no quality option).
 - **`w`**: `number` (optional)
   - Integer in `[1..16384]`
 - **`h`**: `number` (optional)
