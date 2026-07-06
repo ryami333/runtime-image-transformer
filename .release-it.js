@@ -19,6 +19,7 @@ export default {
       "yarn prettier . --check",
       "yarn tsc --noEmit",
       "yarn eslint .",
+      "yarn test",
     ],
     "after:bump": "yarn build",
   },
