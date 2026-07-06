@@ -181,6 +181,7 @@ The transform URL uses these query params:
 - **`fmt`**: `"preserve" | "jpeg" | "png" | "webp" | "avif" | "gif" | "tiff"` (optional)
   - If omitted, it defaults to `"preserve"` (the upstream bytes are returned untouched).
   - `png` and `gif` ignore `q` (PNG is lossless; Sharp's GIF encoder has no quality option).
+  - Which of these a request may actually use is gated by the handler's [`allowedFormats`](#createimagetransformroutehandleroptions) (default `["preserve", "webp", "avif"]`); a disallowed `fmt` yields `400`.
 - **`w`**: `number` (optional)
   - Integer in `[1..16384]`
 - **`h`**: `number` (optional)

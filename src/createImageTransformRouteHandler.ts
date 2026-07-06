@@ -111,7 +111,8 @@ export const createImageTransformRouteHandler = ({
     }
 
     // An omitted `fmt` means "preserve", so gate on that same effective format.
-    if (!allowedFormatSet.has(transformConfig.fmt ?? "preserve")) {
+    const effectiveFmt = transformConfig.fmt ?? "preserve";
+    if (!allowedFormatSet.has(effectiveFmt)) {
       return new Response("Bad Request", { status: 400 });
     }
 
@@ -146,6 +147,9 @@ export const createImageTransformRouteHandler = ({
           "Content-Type": cached.contentType,
           "Cache-Control": cacheControl,
           "No-Vary-Search": noVarySearchHeader,
+          // Serve the declared type as-is; never let a browser sniff a different
+          // (e.g. executable) type out of the bytes.
+          "X-Content-Type-Options": "nosniff",
         },
       });
     }
@@ -168,6 +172,22 @@ export const createImageTransformRouteHandler = ({
     }
     if (!upstream.ok)
       return new Response("Upstream fetch failed", { status: 502 });
+
+    // For `preserve` we hand back the upstream bytes and its `Content-Type`
+    // verbatim, so refuse anything that isn't an image (e.g. an HTML file living
+    // on the source origin). Otherwise a browser could content-sniff
+    // attacker-controlled bytes as markup and execute them from *this* origin.
+    // Transcoding formats are re-encoded and get a fixed `image/*` type below,
+    // so they don't need this guard.
+    if (effectiveFmt === "preserve") {
+      const upstreamType = upstream.headers.get("content-type");
+      if (
+        !upstreamType ||
+        !upstreamType.trim().toLowerCase().startsWith("image/")
+      ) {
+        return new Response("Upstream is not an image", { status: 502 });
+      }
+    }
 
     let sourceBytes: Buffer | null;
     try {
@@ -283,6 +303,9 @@ export const createImageTransformRouteHandler = ({
         "Content-Type": contentType,
         "Cache-Control": cacheControl,
         "No-Vary-Search": noVarySearchHeader,
+        // Serve the declared type as-is; never let a browser sniff a different
+        // (e.g. executable) type out of the bytes.
+        "X-Content-Type-Options": "nosniff",
       },
     });
   };
