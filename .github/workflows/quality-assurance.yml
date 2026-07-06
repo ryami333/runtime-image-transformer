@@ -19,8 +19,6 @@ jobs:
     steps:
       - name: Checking out git
         uses: actions/checkout@v5
-      - name: Enable Corepack
-        run: corepack enable
       - name: Setup node
         uses: actions/setup-node@v5
         with:
@@ -42,8 +40,6 @@ jobs:
     steps:
       - name: Checking out git
         uses: actions/checkout@v5
-      - name: Enable Corepack
-        run: corepack enable
       - name: Setup node
         uses: actions/setup-node@v5
         with:
