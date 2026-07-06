@@ -4,13 +4,22 @@ import { getTransformCacheKey } from "./getTransformCacheKey";
 import { readTransformCache } from "./readTransformCache";
 import { readCappedBody } from "./readCappedBody";
 import { noVarySearchHeader } from "./noVarySearchHeader";
-import sharp, { type Sharp } from "sharp";
 import { pipe } from "fp-ts/function";
 import { writeTransformCache } from "./writeTransformCache";
 import type { Format } from "./transformConfigSchema";
+import type { Sharp } from "sharp";
+import type SharpFactory from "sharp";
+
+/**
+ * The `sharp` module's callable default export — its factory function. Typed
+ * from a type-only import, so this package never pulls Sharp into its own
+ * bundle; the caller supplies the instance (see the `sharp` option).
+ */
+type SharpFactory = typeof import("sharp");
 
 export const createImageTransformRouteHandler = ({
   sourceOrigin,
+  sharp,
   cacheDir = path.join(process.cwd(), ".transform-cache"),
   cacheControl = "public, max-age=31536000, immutable",
   maxSourceBytes = 20 * 1024 * 1024,
@@ -28,6 +37,16 @@ export const createImageTransformRouteHandler = ({
    * the handler at arbitrary hosts — this is the handler's SSRF protection.
    */
   sourceOrigin: string;
+  /**
+   * The `sharp` factory (the module's default export). Sharp is a peer
+   * dependency: install it in your app and pass it in, e.g.
+   * `import sharp from "sharp"; createImageTransformRouteHandler({ sharp, ... })`.
+   *
+   * Taking the instance as an option — rather than shipping a bundled one —
+   * lets the app control Sharp's version and, where needed, its global
+   * configuration (concurrency, SIMD, custom builds) before handing it over.
+   */
+  sharp: SharpFactory;
   cacheDir?: string;
   cacheControl?: string;
   /**

@@ -3417,7 +3417,7 @@ __metadata:
     zod: "npm:^4.4.3"
   peerDependencies:
     next: ">=13.4 <17"
-    sharp: <1
+    sharp: ">=0.35.0 <1"
   peerDependenciesMeta:
     next:
       optional: true

@@ -26,7 +26,11 @@ const req = (config: Parameters<typeof buildUrl>[0]) =>
   new Request(buildUrl(config));
 
 const makeHandler = () =>
-  createImageTransformRouteHandler({ sourceOrigin: SOURCE_ORIGIN, cacheDir });
+  createImageTransformRouteHandler({
+    sourceOrigin: SOURCE_ORIGIN,
+    sharp,
+    cacheDir,
+  });
 
 describe("happy path", () => {
   it("resizes and converts to webp", async () => {
@@ -59,6 +63,7 @@ describe("happy path", () => {
     // These formats aren't in the default allowlist, so opt them all in.
     const handler = createImageTransformRouteHandler({
       sourceOrigin: SOURCE_ORIGIN,
+      sharp,
       cacheDir,
       allowedFormats: ["jpeg", "png", "webp", "avif", "gif", "tiff"],
     });
@@ -261,6 +266,7 @@ describe("allowedFormats", () => {
     stubUpstream(await makePng());
     const handler = createImageTransformRouteHandler({
       sourceOrigin: SOURCE_ORIGIN,
+      sharp,
       cacheDir,
       allowedFormats: ["preserve", "webp", "avif", "gif"],
     });
@@ -275,6 +281,7 @@ describe("allowedFormats", () => {
     stubUpstream(await makePng());
     const handler = createImageTransformRouteHandler({
       sourceOrigin: SOURCE_ORIGIN,
+      sharp,
       cacheDir,
       allowedFormats: ["webp", "avif"],
     });
@@ -293,6 +300,7 @@ describe("maxSourceBytes", () => {
     stubUpstream(await makePng(200, 200));
     const handler = createImageTransformRouteHandler({
       sourceOrigin: SOURCE_ORIGIN,
+      sharp,
       cacheDir,
       maxSourceBytes: 10,
     });
@@ -320,6 +328,7 @@ describe("maxSourceBytes", () => {
     );
     const handler = createImageTransformRouteHandler({
       sourceOrigin: SOURCE_ORIGIN,
+      sharp,
       cacheDir,
       maxSourceBytes: 1024,
     });
@@ -332,6 +341,7 @@ describe("maxSourceBytes", () => {
     stubUpstream(await makePng(20, 20));
     const handler = createImageTransformRouteHandler({
       sourceOrigin: SOURCE_ORIGIN,
+      sharp,
       cacheDir,
       maxSourceBytes: 10 * 1024 * 1024,
     });
@@ -348,6 +358,7 @@ describe("maxInputPixels", () => {
     stubUpstream(await makePng(1000, 1000));
     const handler = createImageTransformRouteHandler({
       sourceOrigin: SOURCE_ORIGIN,
+      sharp,
       cacheDir,
       maxInputPixels: 1000,
     });
@@ -397,6 +408,7 @@ describe("fetch timeout", () => {
 
     const handler = createImageTransformRouteHandler({
       sourceOrigin: SOURCE_ORIGIN,
+      sharp,
       cacheDir,
       fetchTimeoutMs: 20,
     });
@@ -426,7 +438,11 @@ describe("fetch timeout", () => {
 describe("sourceOrigin validation", () => {
   it("throws when sourceOrigin is not an absolute URL", () => {
     expect(() =>
-      createImageTransformRouteHandler({ sourceOrigin: "/images", cacheDir }),
+      createImageTransformRouteHandler({
+        sourceOrigin: "/images",
+        sharp,
+        cacheDir,
+      }),
     ).toThrow(/absolute/);
   });
 
@@ -434,6 +450,7 @@ describe("sourceOrigin validation", () => {
     expect(() =>
       createImageTransformRouteHandler({
         sourceOrigin: "ftp://origin.test",
+        sharp,
         cacheDir,
       }),
     ).toThrow(/http/);
@@ -487,6 +504,7 @@ describe("path traversal", () => {
     stubUpstream(await makePng());
     const handler = createImageTransformRouteHandler({
       sourceOrigin: SOURCE_ORIGIN,
+      sharp,
       cacheDir: nestedCacheDir,
     });
 

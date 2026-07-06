@@ -35,6 +35,7 @@ Create a [route handler](https://nextjs.org/docs/app/getting-started/route-handl
 // src/app/api/image/route.ts
 
 import { createImageTransformRouteHandler } from "runtime-image-transformer/server";
+import sharp from "sharp";
 
 export const runtime = "nodejs";
 
@@ -43,6 +44,8 @@ const handler = createImageTransformRouteHandler({
   // can only ever request paths under this origin, which is the SSRF protection.
   sourceOrigin:
     process.env.IMAGE_SOURCE_ORIGIN ?? "https://images.example.com",
+  // Required. Sharp is a peer dependency — install it and pass the instance in.
+  sharp,
 });
 
 export const GET = handler;
@@ -58,11 +61,14 @@ The handler is a plain `(req: Request) => Promise<Response>`. TanStack Start ser
 
 import { createServerFileRoute } from "@tanstack/react-start/server";
 import { createImageTransformRouteHandler } from "runtime-image-transformer/server";
+import sharp from "sharp";
 
 const handler = createImageTransformRouteHandler({
   // Required. The trusted origin that `source` paths are fetched from.
   sourceOrigin:
     process.env.IMAGE_SOURCE_ORIGIN ?? "https://images.example.com",
+  // Required. Sharp is a peer dependency — install it and pass the instance in.
+  sharp,
 });
 
 export const ServerRoute = createServerFileRoute().methods({
@@ -128,6 +134,9 @@ Returns: `(req: Request) => Promise<Response>` (a Web Fetch handler — compatib
   - **Description**: The trusted, absolute origin that `source` paths are resolved and fetched against, e.g. `"https://images.example.com"`. This is the handler's [SSRF](https://owasp.org/www-community/attacks/Server_Side_Request_Forgery) protection: because `source` is always a **path** joined to this fixed, server-side origin, callers can never make the server fetch an arbitrary host. Any `source` that resolves off-origin (an absolute URL, or a protocol-relative `//host` value) is rejected with `400`.
   - **Note**: This is intentionally not derived from the incoming request — the `Host` header is attacker-controlled, so trusting it would reintroduce SSRF and enable cache poisoning.
   - **Default**: none (required; must be an `http(s)` URL or the handler throws at construction)
+- **`sharp`**: `typeof import("sharp").default` (**required**)
+  - **Description**: The [Sharp](https://sharp.pixelplumbing.com/) factory (the module's default export). Sharp is a **peer dependency**, not bundled: install it in your app and pass the instance in (`import sharp from "sharp"`). This lets your app pin Sharp's version and apply any global configuration (concurrency, SIMD, a custom/self-hosted build) before handing it over.
+  - **Default**: none (required)
 - **`cacheDir`**: `string` (optional)
   - **Description**: Directory on disk where transformed images are cached.
   - **Default**: `path.join(process.cwd(), ".transform-cache")`
