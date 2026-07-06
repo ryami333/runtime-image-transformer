@@ -135,8 +135,11 @@ Returns: `(req: Request) => Promise<Response>` (a Web Fetch handler — compatib
   - **Description**: Value for the response `Cache-Control` header.
   - **Default**: `"public, max-age=31536000, immutable"`
 - **`maxSourceBytes`**: `number` (optional)
-  - **Description**: Maximum size, in bytes, of an upstream source image the handler will download, to guard against memory exhaustion. Enforced both against the upstream `Content-Length` (rejected before downloading) and while streaming the body (so a missing or dishonest `Content-Length` can't get around it). A source over the limit yields `502`. This bounds bytes buffered from the network — it does **not** bound decoded pixels (a decompression/"pixel bomb" is a separate concern).
+  - **Description**: Maximum size, in bytes, of an upstream source image the handler will download, to guard against memory exhaustion. Enforced both against the upstream `Content-Length` (rejected before downloading) and while streaming the body (so a missing or dishonest `Content-Length` can't get around it). A source over the limit yields `502`. This bounds bytes buffered from the network; `maxInputPixels` bounds decoded pixels.
   - **Default**: `20 * 1024 * 1024` (20 MiB)
+- **`maxInputPixels`**: `number` (optional)
+  - **Description**: Maximum number of pixels (width × height) in the **decoded** source image (maps to Sharp's `limitInputPixels`). Guards against a "pixel bomb" — a tiny compressed file that decodes to an enormous canvas, which `maxSourceBytes` can't catch. A source over the limit yields `502`.
+  - **Default**: `100_000_000` (100 megapixels)
 
 > **Note**: Upstream redirects are **not** followed (`redirect: "manual"`). A redirect is treated as a failed fetch (`502`) so it can't be used to bounce the server off `sourceOrigin` to an internal address.
 
@@ -171,9 +174,9 @@ The transform URL uses these query params:
 - **`fmt`**: `"preserve" | "webp" | "avif"` (optional)
   - If omitted, it defaults to `"preserve"`.
 - **`w`**: `number` (optional)
-  - 32-bit integer
+  - Integer in `[1..16384]`
 - **`h`**: `number` (optional)
-  - 32-bit integer
+  - Integer in `[1..16384]`
 - **`fit`**: `"cover" | "contain" | "fill" | "inside" | "outside"` (optional)
   - Only used when resizing (`w` and/or `h` is provided)
   - If omitted, it defaults to `"inside"`.

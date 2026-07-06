@@ -178,6 +178,46 @@ describe("maxSourceBytes", () => {
   });
 });
 
+describe("maxInputPixels", () => {
+  it("502 when the decoded source exceeds the pixel limit", async () => {
+    // A modest byte size, but more pixels than the (tiny) limit allows — the
+    // case maxSourceBytes can't catch.
+    stubUpstream(await makePng(1000, 1000));
+    const handler = createImageTransformRouteHandler({
+      sourceOrigin: SOURCE_ORIGIN,
+      cacheDir,
+      maxInputPixels: 1000,
+    });
+
+    const res = await handler(req({ source: "/a.png", fmt: "webp" }));
+    expect(res.status).toBe(502);
+  });
+
+  it("502 when the upstream is not a decodable image", async () => {
+    stubUpstream(Buffer.from("this is not an image"));
+    const res = await makeHandler()(req({ source: "/a.png", fmt: "webp" }));
+    expect(res.status).toBe(502);
+  });
+});
+
+describe("rejects out-of-range dimensions", () => {
+  // Hand-craft the URL: the builder validates on encode, so an out-of-range
+  // dimension can only reach the handler from a forged/malicious request.
+  const forge = (query: string) => new Request(`${API}?source=/a.png&${query}`);
+
+  it("400 on a non-positive width", async () => {
+    stubUpstream(await makePng());
+    const res = await makeHandler()(forge("w=0"));
+    expect(res.status).toBe(400);
+  });
+
+  it("400 on an oversized width", async () => {
+    stubUpstream(await makePng());
+    const res = await makeHandler()(forge("w=100000"));
+    expect(res.status).toBe(400);
+  });
+});
+
 describe("sourceOrigin validation", () => {
   it("throws when sourceOrigin is not an absolute URL", () => {
     expect(() =>

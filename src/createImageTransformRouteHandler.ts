@@ -12,6 +12,7 @@ export const createImageTransformRouteHandler = ({
   cacheDir = path.join(process.cwd(), ".transform-cache"),
   cacheControl = "public, max-age=31536000, immutable",
   maxSourceBytes = 20 * 1024 * 1024,
+  maxInputPixels = 3840 * 3840,
 }: {
   /**
    * Trusted origin that `source` paths are resolved against, e.g.
@@ -34,6 +35,16 @@ export const createImageTransformRouteHandler = ({
    * @default 20 * 1024 * 1024 (20 MiB)
    */
   maxSourceBytes?: number;
+  /**
+   * Maximum number of pixels (width × height) in the *decoded* source image,
+   * passed to Sharp's `limitInputPixels`. `maxSourceBytes` bounds bytes off the
+   * network, but a tiny compressed file can still decode to an enormous canvas
+   * (a "pixel bomb"); this bounds that. A source over the limit is rejected with
+   * `502` rather than allocating the memory to decode it.
+   *
+   * @default 3840 * 3840 (15 megapixels)
+   */
+  maxInputPixels?: number;
 }) => {
   let origin: URL;
   try {
@@ -117,7 +128,7 @@ export const createImageTransformRouteHandler = ({
       return new Response("Source image too large", { status: 502 });
     }
 
-    const input = sharp(sourceBytes);
+    const input = sharp(sourceBytes, { limitInputPixels: maxInputPixels });
 
     const image = pipe(
       input,
@@ -158,7 +169,17 @@ export const createImageTransformRouteHandler = ({
       },
     );
 
-    const out = await image.toBuffer();
+    // Sharp is lazy, so decode/pixel-limit/encode errors all surface here (e.g.
+    // the upstream isn't a valid image, or it exceeds `maxInputPixels`). Treat
+    // any of these as an unusable upstream rather than letting it become a 500.
+    let out: Buffer;
+    try {
+      out = await image.toBuffer();
+    } catch {
+      return new Response("Source image could not be processed", {
+        status: 502,
+      });
+    }
     const body = new Uint8Array(out);
 
     const contentType = (() => {

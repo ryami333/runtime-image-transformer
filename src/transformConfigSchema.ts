@@ -1,8 +1,11 @@
 import z from "zod";
 
 export const transformConfigSchema = z.object({
-  w: z.int32().optional(),
-  h: z.int32().optional(),
+  // Bounded to positive, sane values: negatives make Sharp throw, and absurd
+  // sizes are a needless resource sink. `withoutEnlargement` already caps output
+  // at the source dimensions, so the ceiling is just a guardrail.
+  w: z.int32().min(1).max(16384).optional(),
+  h: z.int32().min(1).max(16384).optional(),
   /**
    * Resize fit mode (Sharp's `ResizeOptions["fit"]`).
    *
