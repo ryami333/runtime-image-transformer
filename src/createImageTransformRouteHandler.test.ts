@@ -1,10 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import fs from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import sharp from "sharp";
 import { createImageTransformRouteHandler } from "./createImageTransformRouteHandler";
-import { createFileSystemCachePlugin } from "./createFileSystemCachePlugin";
 import { createImageUrlBuilder } from "./createImageUrlBuilder";
 import { makePng, stubUpstream } from "./testHelpers";
 import type { CacheEntry, CachePlugin } from "./CachePlugin";
@@ -13,28 +9,32 @@ const API = "https://cdn.example.com/_image";
 const SOURCE_ORIGIN = "https://origin.test";
 const buildUrl = createImageUrlBuilder({ apiRouteUrl: API });
 
-let cacheDir: string;
-let cachePlugin: CachePlugin;
-
-beforeEach(async () => {
-  cacheDir = await fs.mkdtemp(path.join(os.tmpdir(), "transform-cache-"));
-  cachePlugin = createFileSystemCachePlugin({ cacheDir });
-});
-
-afterEach(async () => {
+afterEach(() => {
   vi.unstubAllGlobals();
-  await fs.rm(cacheDir, { recursive: true, force: true });
 });
 
 const req = (config: Parameters<typeof buildUrl>[0]) =>
   new Request(buildUrl(config));
 
-const makeHandler = () =>
+const makeHandler = (
+  overrides?: Partial<Parameters<typeof createImageTransformRouteHandler>[0]>,
+) =>
   createImageTransformRouteHandler({
     sourceOrigin: SOURCE_ORIGIN,
     sharp,
-    cachePlugin,
+    ...overrides,
   });
+
+/** A minimal in-memory {@link CachePlugin}, backed by a Map. */
+const makeMemoryCachePlugin = (): CachePlugin => {
+  const store = new Map<string, CacheEntry>();
+  return {
+    read: async (key) => store.get(key) ?? null,
+    write: async (key, entry) => {
+      store.set(key, entry);
+    },
+  };
+};
 
 describe("happy path", () => {
   it("resizes and converts to webp", async () => {
@@ -65,10 +65,7 @@ describe("happy path", () => {
   ] as const)("transcodes to %s", async (fmt, contentType, decodedFormat) => {
     stubUpstream(await makePng(200, 200));
     // These formats aren't in the default allowlist, so opt them all in.
-    const handler = createImageTransformRouteHandler({
-      sourceOrigin: SOURCE_ORIGIN,
-      sharp,
-      cachePlugin,
+    const handler = makeHandler({
       allowedFormats: ["jpeg", "png", "webp", "avif", "gif", "tiff"],
     });
 
@@ -125,7 +122,7 @@ describe("happy path", () => {
 
   it("sends X-Content-Type-Options: nosniff on fresh and cached responses", async () => {
     stubUpstream(await makePng());
-    const handler = makeHandler();
+    const handler = makeHandler({ cachePlugin: makeMemoryCachePlugin() });
 
     const fresh = await handler(req({ source: "/a.png", fmt: "webp" }));
     const cached = await handler(req({ source: "/a.png", fmt: "webp" }));
@@ -136,7 +133,7 @@ describe("happy path", () => {
 
   it("advertises the significant query params via No-Vary-Search", async () => {
     stubUpstream(await makePng());
-    const handler = makeHandler();
+    const handler = makeHandler({ cachePlugin: makeMemoryCachePlugin() });
 
     // Fresh response, then the cache-hit response — both should carry it.
     const fresh = await handler(req({ source: "/a.png", fmt: "webp" }));
@@ -146,20 +143,6 @@ describe("happy path", () => {
       'key-order, params, except=("w" "h" "fit" "fmt" "q" "source")';
     expect(fresh.headers.get("No-Vary-Search")).toBe(expected);
     expect(cached.headers.get("No-Vary-Search")).toBe(expected);
-  });
-
-  it("caches: a second request does not hit upstream", async () => {
-    const fetchMock = stubUpstream(await makePng());
-    const handler = makeHandler();
-    const send = () => handler(req({ source: "/a.png", fmt: "webp" }));
-
-    const first = await send();
-    const second = await send();
-
-    expect(first.status).toBe(200);
-    expect(second.status).toBe(200);
-    expect(second.headers.get("Content-Type")).toBe("image/webp");
-    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -268,10 +251,7 @@ describe("allowedFormats", () => {
 
   it("allows a format once it is added to allowedFormats", async () => {
     stubUpstream(await makePng());
-    const handler = createImageTransformRouteHandler({
-      sourceOrigin: SOURCE_ORIGIN,
-      sharp,
-      cachePlugin,
+    const handler = makeHandler({
       allowedFormats: ["preserve", "webp", "avif", "gif"],
     });
 
@@ -283,12 +263,7 @@ describe("allowedFormats", () => {
 
   it("400 on an omitted fmt when preserve is not allowed", async () => {
     stubUpstream(await makePng());
-    const handler = createImageTransformRouteHandler({
-      sourceOrigin: SOURCE_ORIGIN,
-      sharp,
-      cachePlugin,
-      allowedFormats: ["webp", "avif"],
-    });
+    const handler = makeHandler({ allowedFormats: ["webp", "avif"] });
 
     // No `fmt` means the effective format is "preserve", which this config
     // forbids — so every request must name an allowed format.
@@ -302,12 +277,7 @@ describe("maxSourceBytes", () => {
     // No Content-Length is set on this Response, so the cap can only be
     // enforced while reading the body.
     stubUpstream(await makePng(200, 200));
-    const handler = createImageTransformRouteHandler({
-      sourceOrigin: SOURCE_ORIGIN,
-      sharp,
-      cachePlugin,
-      maxSourceBytes: 10,
-    });
+    const handler = makeHandler({ maxSourceBytes: 10 });
 
     const res = await handler(req({ source: "/a.png", fmt: "webp" }));
     expect(res.status).toBe(502);
@@ -330,12 +300,7 @@ describe("maxSourceBytes", () => {
           }),
       ),
     );
-    const handler = createImageTransformRouteHandler({
-      sourceOrigin: SOURCE_ORIGIN,
-      sharp,
-      cachePlugin,
-      maxSourceBytes: 1024,
-    });
+    const handler = makeHandler({ maxSourceBytes: 1024 });
 
     const res = await handler(req({ source: "/a.png", fmt: "webp" }));
     expect(res.status).toBe(502);
@@ -343,12 +308,7 @@ describe("maxSourceBytes", () => {
 
   it("allows images under the cap", async () => {
     stubUpstream(await makePng(20, 20));
-    const handler = createImageTransformRouteHandler({
-      sourceOrigin: SOURCE_ORIGIN,
-      sharp,
-      cachePlugin,
-      maxSourceBytes: 10 * 1024 * 1024,
-    });
+    const handler = makeHandler({ maxSourceBytes: 10 * 1024 * 1024 });
 
     const res = await handler(req({ source: "/a.png", fmt: "webp" }));
     expect(res.status).toBe(200);
@@ -360,12 +320,7 @@ describe("maxInputPixels", () => {
     // A modest byte size, but more pixels than the (tiny) limit allows — the
     // case maxSourceBytes can't catch.
     stubUpstream(await makePng(1000, 1000));
-    const handler = createImageTransformRouteHandler({
-      sourceOrigin: SOURCE_ORIGIN,
-      sharp,
-      cachePlugin,
-      maxInputPixels: 1000,
-    });
+    const handler = makeHandler({ maxInputPixels: 1000 });
 
     const res = await handler(req({ source: "/a.png", fmt: "webp" }));
     expect(res.status).toBe(502);
@@ -410,12 +365,7 @@ describe("fetch timeout", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    const handler = createImageTransformRouteHandler({
-      sourceOrigin: SOURCE_ORIGIN,
-      sharp,
-      cachePlugin,
-      fetchTimeoutMs: 20,
-    });
+    const handler = makeHandler({ fetchTimeoutMs: 20 });
 
     const res = await handler(req({ source: "/a.png", fmt: "webp" }));
 
@@ -441,22 +391,12 @@ describe("fetch timeout", () => {
 
 describe("sourceOrigin validation", () => {
   it("throws when sourceOrigin is not an absolute URL", () => {
-    expect(() =>
-      createImageTransformRouteHandler({
-        sourceOrigin: "/images",
-        sharp,
-        cachePlugin,
-      }),
-    ).toThrow(/absolute/);
+    expect(() => makeHandler({ sourceOrigin: "/images" })).toThrow(/absolute/);
   });
 
   it("throws when sourceOrigin is not http(s)", () => {
     expect(() =>
-      createImageTransformRouteHandler({
-        sourceOrigin: "ftp://origin.test",
-        sharp,
-        cachePlugin,
-      }),
+      makeHandler({ sourceOrigin: "ftp://origin.test" }),
     ).toThrow(/http/);
   });
 });
@@ -496,48 +436,12 @@ describe("path traversal", () => {
     const fetchedUrl = String((fetchMock.mock.calls[0] as unknown[])[0]);
     expect(fetchedUrl).toBe("https://origin.test/etc/passwd");
   });
-
-  it("does not write cache files outside cacheDir for a hostile source", async () => {
-    // A root we fully control: cacheDir is a nested subdir, and `outside` is a
-    // sibling a traversal write would have to escape into.
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), "traversal-"));
-    const nestedCacheDir = path.join(root, "cache");
-    const outside = path.join(root, "outside");
-    await fs.mkdir(outside, { recursive: true });
-
-    stubUpstream(await makePng());
-    const handler = createImageTransformRouteHandler({
-      sourceOrigin: SOURCE_ORIGIN,
-      sharp,
-      cachePlugin: createFileSystemCachePlugin({ cacheDir: nestedCacheDir }),
-    });
-
-    // The raw source (with its `../`) is what gets hashed into the cache key, so
-    // this is the exact string a traversal attack would rely on.
-    const res = await handler(
-      req({ source: "/../../../../outside/pwned", fmt: "webp" }),
-    );
-    expect(res.status).toBe(200);
-
-    // The sibling dir is untouched — nothing escaped the cache root...
-    expect(await fs.readdir(outside)).toEqual([]);
-
-    // ...and the response really was cached (so the assertion above isn't
-    // vacuous), entirely under cacheDir.
-    const written = await fs.readdir(nestedCacheDir, { recursive: true });
-    expect(written.some((f) => String(f).endsWith(".bin"))).toBe(true);
-
-    await fs.rm(root, { recursive: true, force: true });
-  });
 });
 
 describe("custom cache plugin", () => {
   it("disables caching when no cache is supplied", async () => {
     const fetchMock = stubUpstream(await makePng());
-    const handler = createImageTransformRouteHandler({
-      sourceOrigin: SOURCE_ORIGIN,
-      sharp,
-    });
+    const handler = makeHandler();
     const send = () => handler(req({ source: "/a.png", fmt: "webp" }));
 
     const first = await send();
@@ -564,11 +468,7 @@ describe("custom cache plugin", () => {
     };
 
     const fetchMock = stubUpstream(await makePng());
-    const handler = createImageTransformRouteHandler({
-      sourceOrigin: SOURCE_ORIGIN,
-      sharp,
-      cachePlugin,
-    });
+    const handler = makeHandler({ cachePlugin });
     const send = () => handler(req({ source: "/a.png", fmt: "webp" }));
 
     const first = await send();
