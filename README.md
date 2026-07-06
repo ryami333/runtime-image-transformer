@@ -135,9 +135,9 @@ Returns: `(req: Request) => Promise<Response>` (a Web Fetch handler — compatib
 - **`sharp`**: `typeof import("sharp").default` (**required**)
   - **Description**: The [Sharp](https://sharp.pixelplumbing.com/) factory (the module's default export). Sharp is a **peer dependency**, not bundled: install it in your app and pass the instance in (`import sharp from "sharp"`). This lets your app pin Sharp's version and apply any global configuration (concurrency, SIMD, a custom/self-hosted build) before handing it over.
   - **Default**: none (required)
-- **`cacheDir`**: `string` (optional)
-  - **Description**: Directory on disk where transformed images are cached.
-  - **Default**: `path.join(process.cwd(), ".transform-cache")`
+- **`cache`**: [`CachePlugin`](#cacheplugin) (optional)
+  - **Description**: Cache backend for transformed images. A `CachePlugin` is an object with async `read(key)` / `write(key, entry)` methods, so you can back the cache with whatever store you like — the on-disk [`createFileSystemCache`](#createfilesystemcacheoptions), or a shared/remote store such as S3-compatible object storage. See [`createFileSystemCache`](#createfilesystemcacheoptions) and [`CachePlugin`](#cacheplugin).
+  - **Default**: `undefined` — **server-side caching is disabled**, and every request is transformed from the upstream source. Omit `cache` on runtimes without a writable/persistent filesystem (e.g. workers), or when a CDN in front of the handler is expected to do the caching. Pass `createFileSystemCache()` to opt into the on-disk cache.
 - **`cacheControl`**: `string` (optional)
   - **Description**: Value for the response `Cache-Control` header.
   - **Default**: `"public, max-age=31536000, immutable"`
@@ -165,7 +165,86 @@ Returns: `(req: Request) => Promise<Response>` (a Web Fetch handler — compatib
   - `fit: "inside"` (or the provided `fit`)
   - `withoutEnlargement: true`
 - **Auto-orient**: Sharp `rotate()` is applied to respect EXIF orientation.
-- **Caching**: responses are cached on disk; your runtime must have a writable filesystem.
+- **Caching**: disabled by default. Pass a `cache` plugin to enable it — `createFileSystemCache` writes to disk (so your runtime must have a writable filesystem), or supply a custom [`CachePlugin`](#cacheplugin) to cache elsewhere (e.g. shared object storage). With no `cache`, every request is transformed fresh — rely on a CDN in front of the handler to absorb load.
+
+#### `createFileSystemCache(options)`
+
+Import from: `runtime-image-transformer/server`
+
+Returns: a [`CachePlugin`](#cacheplugin) that stores transformed images on the local filesystem (sharded by key prefix). This is the default `cache` when none is supplied to the handler.
+
+**Options**
+
+- **`cacheDir`**: `string` (optional)
+  - **Description**: Directory on disk where transformed images are cached.
+  - **Default**: `path.join(process.cwd(), ".transform-cache")`
+
+```ts
+import {
+  createImageTransformRouteHandler,
+  createFileSystemCache,
+} from "runtime-image-transformer/server";
+import sharp from "sharp";
+
+const handler = createImageTransformRouteHandler({
+  sourceOrigin: "https://images.example.com",
+  sharp,
+  cache: createFileSystemCache({ cacheDir: "/var/cache/images" }),
+});
+```
+
+#### `CachePlugin`
+
+Import from: `runtime-image-transformer/server` (type-only)
+
+The pluggable cache contract. Implement it to back the cache with any store — for example, shared S3-compatible object storage so a fleet of instances share one cache:
+
+```ts
+type CacheEntry = {
+  /** The encoded image bytes. */
+  body: Uint8Array;
+  /** The `Content-Type` to serve the bytes with. */
+  contentType: string;
+};
+
+type CachePlugin = {
+  /** Resolve to the entry on a hit, or `null` on a miss. */
+  read: (key: string) => Promise<CacheEntry | null>;
+  /** Persist an entry under `key`. */
+  write: (key: string, entry: CacheEntry) => Promise<void>;
+};
+```
+
+The handler derives an opaque, filesystem-safe `key` for each transform, calls `read(key)` before doing any work, and `write(key, entry)` after producing a result.
+
+```ts
+import {
+  createImageTransformRouteHandler,
+  type CachePlugin,
+} from "runtime-image-transformer/server";
+import sharp from "sharp";
+
+// Example: an S3-compatible object-storage backed cache.
+const s3Cache: CachePlugin = {
+  read: async (key) => {
+    const object = await bucket.get(key);
+    if (!object) return null;
+    return {
+      body: new Uint8Array(await object.arrayBuffer()),
+      contentType: object.httpMetadata.contentType,
+    };
+  },
+  write: async (key, { body, contentType }) => {
+    await bucket.put(key, body, { httpMetadata: { contentType } });
+  },
+};
+
+const handler = createImageTransformRouteHandler({
+  sourceOrigin: "https://images.example.com",
+  sharp,
+  cache: s3Cache,
+});
+```
 
 #### `createImageUrlBuilder(options)`
 

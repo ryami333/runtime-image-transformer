@@ -4,17 +4,21 @@ import os from "node:os";
 import path from "node:path";
 import sharp from "sharp";
 import { createImageTransformRouteHandler } from "./createImageTransformRouteHandler";
+import { createFileSystemCache } from "./createFileSystemCache";
 import { createImageUrlBuilder } from "./createImageUrlBuilder";
 import { makePng, stubUpstream } from "./testHelpers";
+import type { CacheEntry, CachePlugin } from "./CachePlugin";
 
 const API = "https://cdn.example.com/_image";
 const SOURCE_ORIGIN = "https://origin.test";
 const buildUrl = createImageUrlBuilder({ apiRouteUrl: API });
 
 let cacheDir: string;
+let cache: CachePlugin;
 
 beforeEach(async () => {
   cacheDir = await fs.mkdtemp(path.join(os.tmpdir(), "transform-cache-"));
+  cache = createFileSystemCache({ cacheDir });
 });
 
 afterEach(async () => {
@@ -29,7 +33,7 @@ const makeHandler = () =>
   createImageTransformRouteHandler({
     sourceOrigin: SOURCE_ORIGIN,
     sharp,
-    cacheDir,
+    cache,
   });
 
 describe("happy path", () => {
@@ -64,7 +68,7 @@ describe("happy path", () => {
     const handler = createImageTransformRouteHandler({
       sourceOrigin: SOURCE_ORIGIN,
       sharp,
-      cacheDir,
+      cache,
       allowedFormats: ["jpeg", "png", "webp", "avif", "gif", "tiff"],
     });
 
@@ -267,7 +271,7 @@ describe("allowedFormats", () => {
     const handler = createImageTransformRouteHandler({
       sourceOrigin: SOURCE_ORIGIN,
       sharp,
-      cacheDir,
+      cache,
       allowedFormats: ["preserve", "webp", "avif", "gif"],
     });
 
@@ -282,7 +286,7 @@ describe("allowedFormats", () => {
     const handler = createImageTransformRouteHandler({
       sourceOrigin: SOURCE_ORIGIN,
       sharp,
-      cacheDir,
+      cache,
       allowedFormats: ["webp", "avif"],
     });
 
@@ -301,7 +305,7 @@ describe("maxSourceBytes", () => {
     const handler = createImageTransformRouteHandler({
       sourceOrigin: SOURCE_ORIGIN,
       sharp,
-      cacheDir,
+      cache,
       maxSourceBytes: 10,
     });
 
@@ -329,7 +333,7 @@ describe("maxSourceBytes", () => {
     const handler = createImageTransformRouteHandler({
       sourceOrigin: SOURCE_ORIGIN,
       sharp,
-      cacheDir,
+      cache,
       maxSourceBytes: 1024,
     });
 
@@ -342,7 +346,7 @@ describe("maxSourceBytes", () => {
     const handler = createImageTransformRouteHandler({
       sourceOrigin: SOURCE_ORIGIN,
       sharp,
-      cacheDir,
+      cache,
       maxSourceBytes: 10 * 1024 * 1024,
     });
 
@@ -359,7 +363,7 @@ describe("maxInputPixels", () => {
     const handler = createImageTransformRouteHandler({
       sourceOrigin: SOURCE_ORIGIN,
       sharp,
-      cacheDir,
+      cache,
       maxInputPixels: 1000,
     });
 
@@ -409,7 +413,7 @@ describe("fetch timeout", () => {
     const handler = createImageTransformRouteHandler({
       sourceOrigin: SOURCE_ORIGIN,
       sharp,
-      cacheDir,
+      cache,
       fetchTimeoutMs: 20,
     });
 
@@ -441,7 +445,7 @@ describe("sourceOrigin validation", () => {
       createImageTransformRouteHandler({
         sourceOrigin: "/images",
         sharp,
-        cacheDir,
+        cache,
       }),
     ).toThrow(/absolute/);
   });
@@ -451,7 +455,7 @@ describe("sourceOrigin validation", () => {
       createImageTransformRouteHandler({
         sourceOrigin: "ftp://origin.test",
         sharp,
-        cacheDir,
+        cache,
       }),
     ).toThrow(/http/);
   });
@@ -505,7 +509,7 @@ describe("path traversal", () => {
     const handler = createImageTransformRouteHandler({
       sourceOrigin: SOURCE_ORIGIN,
       sharp,
-      cacheDir: nestedCacheDir,
+      cache: createFileSystemCache({ cacheDir: nestedCacheDir }),
     });
 
     // The raw source (with its `../`) is what gets hashed into the cache key, so
@@ -524,6 +528,61 @@ describe("path traversal", () => {
     expect(written.some((f) => String(f).endsWith(".bin"))).toBe(true);
 
     await fs.rm(root, { recursive: true, force: true });
+  });
+});
+
+describe("custom cache plugin", () => {
+  it("disables caching when no cache is supplied", async () => {
+    const fetchMock = stubUpstream(await makePng());
+    const handler = createImageTransformRouteHandler({
+      sourceOrigin: SOURCE_ORIGIN,
+      sharp,
+    });
+    const send = () => handler(req({ source: "/a.png", fmt: "webp" }));
+
+    const first = await send();
+    const second = await send();
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    expect(second.headers.get("Content-Type")).toBe("image/webp");
+    // No cache means every request is transformed from upstream.
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("reads from and writes to a supplied CachePlugin", async () => {
+    const store = new Map<string, CacheEntry>();
+    const reads: string[] = [];
+    const cache: CachePlugin = {
+      read: async (key) => {
+        reads.push(key);
+        return store.get(key) ?? null;
+      },
+      write: async (key, entry) => {
+        store.set(key, entry);
+      },
+    };
+
+    const fetchMock = stubUpstream(await makePng());
+    const handler = createImageTransformRouteHandler({
+      sourceOrigin: SOURCE_ORIGIN,
+      sharp,
+      cache,
+    });
+    const send = () => handler(req({ source: "/a.png", fmt: "webp" }));
+
+    const first = await send();
+    expect(first.status).toBe(200);
+    // The miss populated the custom store...
+    expect(store.size).toBe(1);
+
+    const second = await send();
+    expect(second.status).toBe(200);
+    expect(second.headers.get("Content-Type")).toBe("image/webp");
+    // ...and the second request was served from it, never touching upstream.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    // Same key both times: a write followed by a hit.
+    expect(new Set(reads).size).toBe(1);
   });
 });
 

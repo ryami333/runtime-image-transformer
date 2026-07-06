@@ -1,11 +1,9 @@
-import path from "node:path";
 import { searchParamsToTransformConfigCodec } from "./searchParamsToTransformConfigCodec";
 import { getTransformCacheKey } from "./getTransformCacheKey";
-import { readTransformCache } from "./readTransformCache";
 import { readCappedBody } from "./readCappedBody";
 import { noVarySearchHeader } from "./noVarySearchHeader";
 import { pipe } from "fp-ts/function";
-import { writeTransformCache } from "./writeTransformCache";
+import type { CachePlugin } from "./CachePlugin";
 import type { Format } from "./transformConfigSchema";
 /**
  * `SharpConstructor` is the type of the `sharp` module's callable default
@@ -18,7 +16,7 @@ import type { Sharp, SharpConstructor } from "sharp";
 export const createImageTransformRouteHandler = ({
   sourceOrigin,
   sharp,
-  cacheDir = path.join(process.cwd(), ".transform-cache"),
+  cache,
   cacheControl = "public, max-age=31536000, immutable",
   maxSourceBytes = 20 * 1024 * 1024,
   maxInputPixels = 3840 * 3840,
@@ -45,7 +43,21 @@ export const createImageTransformRouteHandler = ({
    * configuration (concurrency, SIMD, custom builds) before handing it over.
    */
   sharp: SharpConstructor;
-  cacheDir?: string;
+  /**
+   * Cache backend for transformed images. Supply a {@link CachePlugin} — an
+   * object with async `read(key)` / `write(key, entry)` methods — to control
+   * where results are stored: the on-disk `createFileSystemCache`, or a
+   * shared/remote store (e.g. S3-compatible object storage) via your own
+   * implementation.
+   *
+   * When omitted, **server-side caching is disabled** and every request is
+   * transformed from the upstream source. This suits environments without a
+   * writable/persistent filesystem (e.g. workers) or where a CDN in front of
+   * the handler is expected to do the caching.
+   *
+   * @default undefined (no server-side cache)
+   */
+  cache?: CachePlugin;
   cacheControl?: string;
   /**
    * Maximum size, in bytes, of an upstream source image the handler will
@@ -157,7 +169,7 @@ export const createImageTransformRouteHandler = ({
     const quality = transformConfig.q ?? 100;
 
     const cacheKey = getTransformCacheKey({ canonicalUrl });
-    const cached = await readTransformCache({ cacheKey, cacheDir });
+    const cached = await cache?.read(cacheKey);
     if (cached) {
       return new Response(cached.body, {
         headers: {
@@ -308,12 +320,7 @@ export const createImageTransformRouteHandler = ({
       }
     })();
 
-    await writeTransformCache({
-      cacheKey,
-      body: out,
-      meta: { contentType },
-      cacheDir,
-    });
+    await cache?.write(cacheKey, { body: out, contentType });
 
     return new Response(body, {
       headers: {

@@ -8,7 +8,7 @@ export async function writeTransformCache({
   cacheDir,
 }: {
   cacheKey: string;
-  body: Buffer;
+  body: Uint8Array;
   meta: { contentType: string };
   cacheDir: string;
 }) {
