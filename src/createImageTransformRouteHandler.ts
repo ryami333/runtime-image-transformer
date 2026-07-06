@@ -7,15 +7,13 @@ import { noVarySearchHeader } from "./noVarySearchHeader";
 import { pipe } from "fp-ts/function";
 import { writeTransformCache } from "./writeTransformCache";
 import type { Format } from "./transformConfigSchema";
-import type { Sharp } from "sharp";
-import type SharpFactory from "sharp";
-
 /**
- * The `sharp` module's callable default export — its factory function. Typed
- * from a type-only import, so this package never pulls Sharp into its own
- * bundle; the caller supplies the instance (see the `sharp` option).
+ * `SharpConstructor` is the type of the `sharp` module's callable default
+ * export — its factory function. Imported type-only, so this package never
+ * pulls Sharp into its own bundle; the caller supplies the instance (see the
+ * `sharp` option).
  */
-type SharpFactory = typeof import("sharp");
+import type { Sharp, SharpConstructor } from "sharp";
 
 export const createImageTransformRouteHandler = ({
   sourceOrigin,
@@ -46,7 +44,7 @@ export const createImageTransformRouteHandler = ({
    * lets the app control Sharp's version and, where needed, its global
    * configuration (concurrency, SIMD, custom builds) before handing it over.
    */
-  sharp: SharpFactory;
+  sharp: SharpConstructor;
   cacheDir?: string;
   cacheControl?: string;
   /**
