@@ -139,7 +139,10 @@ Returns: `(req: Request) => Promise<Response>` (a Web Fetch handler — compatib
   - **Default**: `20 * 1024 * 1024` (20 MiB)
 - **`maxInputPixels`**: `number` (optional)
   - **Description**: Maximum number of pixels (width × height) in the **decoded** source image (maps to Sharp's `limitInputPixels`). Guards against a "pixel bomb" — a tiny compressed file that decodes to an enormous canvas, which `maxSourceBytes` can't catch. A source over the limit yields `502`.
-  - **Default**: `100_000_000` (100 megapixels)
+  - **Default**: `3840 * 3840` (~15 megapixels)
+- **`fetchTimeoutMs`**: `number` (optional)
+  - **Description**: Timeout for the upstream fetch. Bounds the whole upstream interaction — connect, response, and body download — so a slow or hanging `source` can't tie up the request indefinitely. On timeout the handler responds with `502`.
+  - **Default**: `10_000` (10 seconds)
 
 > **Note**: Upstream redirects are **not** followed (`redirect: "manual"`). A redirect is treated as a failed fetch (`502`) so it can't be used to bounce the server off `sourceOrigin` to an internal address.
 

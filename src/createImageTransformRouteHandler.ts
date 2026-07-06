@@ -13,6 +13,7 @@ export const createImageTransformRouteHandler = ({
   cacheControl = "public, max-age=31536000, immutable",
   maxSourceBytes = 20 * 1024 * 1024,
   maxInputPixels = 3840 * 3840,
+  fetchTimeoutMs = 10_000,
 }: {
   /**
    * Trusted origin that `source` paths are resolved against, e.g.
@@ -45,6 +46,15 @@ export const createImageTransformRouteHandler = ({
    * @default 3840 * 3840 (15 megapixels)
    */
   maxInputPixels?: number;
+  /**
+   * Timeout, in milliseconds, for the upstream fetch. Bounds the whole upstream
+   * interaction — connect, response, and body download — so a slow or hanging
+   * `source` can't tie up the request indefinitely. On timeout the handler
+   * responds with `502`.
+   *
+   * @default 10_000 (10 seconds)
+   */
+  fetchTimeoutMs?: number;
 }) => {
   let origin: URL;
   try {
@@ -119,11 +129,29 @@ export const createImageTransformRouteHandler = ({
     // `redirect: "manual"` prevents the upstream from bouncing the server
     // off-origin (e.g. to an internal address); a redirect surfaces here as a
     // non-ok response and is treated as a failed fetch.
-    const upstream = await fetch(sourceUrl, { redirect: "manual" });
+    //
+    // The abort signal bounds the whole upstream interaction — connect,
+    // response, and body download — because aborting the request also errors
+    // the body stream that `readCappedBody` reads below.
+    let upstream: Response;
+    try {
+      upstream = await fetch(sourceUrl, {
+        redirect: "manual",
+        signal: AbortSignal.timeout(fetchTimeoutMs),
+      });
+    } catch {
+      return new Response("Upstream fetch failed", { status: 502 });
+    }
     if (!upstream.ok)
       return new Response("Upstream fetch failed", { status: 502 });
 
-    const sourceBytes = await readCappedBody(upstream, maxSourceBytes);
+    let sourceBytes: Buffer | null;
+    try {
+      sourceBytes = await readCappedBody(upstream, maxSourceBytes);
+    } catch {
+      // A body-stream error, including the timeout firing mid-download.
+      return new Response("Upstream fetch failed", { status: 502 });
+    }
     if (!sourceBytes) {
       return new Response("Source image too large", { status: 502 });
     }

@@ -218,6 +218,48 @@ describe("rejects out-of-range dimensions", () => {
   });
 });
 
+describe("fetch timeout", () => {
+  it("502 when the upstream does not respond within fetchTimeoutMs", async () => {
+    // A fetch that only settles when its abort signal fires, so the real
+    // AbortSignal.timeout drives the test (quickly).
+    const fetchMock = vi.fn(
+      (_url: string, init?: { signal?: AbortSignal }) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () =>
+            reject(new Error("aborted")),
+          );
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const handler = createImageTransformRouteHandler({
+      sourceOrigin: SOURCE_ORIGIN,
+      cacheDir,
+      fetchTimeoutMs: 20,
+    });
+
+    const res = await handler(req({ source: "/a.png", fmt: "webp" }));
+
+    expect(res.status).toBe(502);
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+  });
+
+  it("502 when the upstream fetch throws", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("network down");
+      }),
+    );
+
+    const res = await makeHandler()(req({ source: "/a.png", fmt: "webp" }));
+    expect(res.status).toBe(502);
+  });
+});
+
 describe("sourceOrigin validation", () => {
   it("throws when sourceOrigin is not an absolute URL", () => {
     expect(() =>
