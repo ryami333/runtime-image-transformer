@@ -2,7 +2,8 @@ import path from "node:path";
 import { searchParamsToTransformConfigCodec } from "./searchParamsToTransformConfigCodec";
 import { getTransformCacheKey } from "./getTransformCacheKey";
 import { readTransformCache } from "./readTransformCache";
-import Sharp from "sharp";
+import { readCappedBody } from "./readCappedBody";
+import sharp, { type Sharp } from "sharp";
 import { pipe } from "fp-ts/function";
 import { writeTransformCache } from "./writeTransformCache";
 
@@ -10,6 +11,7 @@ export const createImageTransformRouteHandler = ({
   sourceOrigin,
   cacheDir = path.join(process.cwd(), ".transform-cache"),
   cacheControl = "public, max-age=31536000, immutable",
+  maxSourceBytes = 20 * 1024 * 1024,
 }: {
   /**
    * Trusted origin that `source` paths are resolved against, e.g.
@@ -23,6 +25,15 @@ export const createImageTransformRouteHandler = ({
   sourceOrigin: string;
   cacheDir?: string;
   cacheControl?: string;
+  /**
+   * Maximum size, in bytes, of an upstream source image the handler will
+   * download. Guards against memory exhaustion from a very large `source`.
+   * Enforced against the `Content-Length` header and while streaming the body,
+   * so a missing or dishonest `Content-Length` can't get around it.
+   *
+   * @default 20 * 1024 * 1024 (20 MiB)
+   */
+  maxSourceBytes?: number;
 }) => {
   let origin: URL;
   try {
@@ -101,7 +112,12 @@ export const createImageTransformRouteHandler = ({
     if (!upstream.ok)
       return new Response("Upstream fetch failed", { status: 502 });
 
-    const input = Sharp(Buffer.from(await upstream.arrayBuffer()));
+    const sourceBytes = await readCappedBody(upstream, maxSourceBytes);
+    if (!sourceBytes) {
+      return new Response("Source image too large", { status: 502 });
+    }
+
+    const input = sharp(sourceBytes);
 
     const image = pipe(
       input,
@@ -109,12 +125,12 @@ export const createImageTransformRouteHandler = ({
        * auto-orient: read's the image's EXIF data and rotates it to the correct
        * orientation.
        */
-      (image: Sharp.Sharp) => image.rotate(),
+      (image: Sharp) => image.rotate(),
 
       /**
        * Resize
        */
-      (image: Sharp.Sharp) =>
+      (image: Sharp) =>
         transformConfig.w || transformConfig.h
           ? image.resize({
               width: transformConfig.w,
@@ -127,7 +143,7 @@ export const createImageTransformRouteHandler = ({
       /**
        * Change format
        */
-      (image: Sharp.Sharp) => {
+      (image: Sharp) => {
         switch (transformConfig.fmt) {
           case "preserve":
             return image;

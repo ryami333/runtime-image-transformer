@@ -123,6 +123,61 @@ describe("rejects bad input", () => {
   });
 });
 
+describe("maxSourceBytes", () => {
+  it("502 when the streamed body exceeds the cap", async () => {
+    // No Content-Length is set on this Response, so the cap can only be
+    // enforced while reading the body.
+    stubUpstream(await makePng(200, 200));
+    const handler = createImageTransformRouteHandler({
+      sourceOrigin: SOURCE_ORIGIN,
+      cacheDir,
+      maxSourceBytes: 10,
+    });
+
+    const res = await handler(req({ source: "/a.png", fmt: "webp" }));
+    expect(res.status).toBe(502);
+  });
+
+  it("502 up front when Content-Length exceeds the cap", async () => {
+    const png = await makePng(1, 1);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(new Uint8Array(png), {
+            status: 200,
+            headers: {
+              "content-type": "image/png",
+              // Lie about a small body being huge; the pre-check should reject
+              // it without reading the (small) body.
+              "content-length": "999999999",
+            },
+          }),
+      ),
+    );
+    const handler = createImageTransformRouteHandler({
+      sourceOrigin: SOURCE_ORIGIN,
+      cacheDir,
+      maxSourceBytes: 1024,
+    });
+
+    const res = await handler(req({ source: "/a.png", fmt: "webp" }));
+    expect(res.status).toBe(502);
+  });
+
+  it("allows images under the cap", async () => {
+    stubUpstream(await makePng(20, 20));
+    const handler = createImageTransformRouteHandler({
+      sourceOrigin: SOURCE_ORIGIN,
+      cacheDir,
+      maxSourceBytes: 10 * 1024 * 1024,
+    });
+
+    const res = await handler(req({ source: "/a.png", fmt: "webp" }));
+    expect(res.status).toBe(200);
+  });
+});
+
 describe("sourceOrigin validation", () => {
   it("throws when sourceOrigin is not an absolute URL", () => {
     expect(() =>
