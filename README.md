@@ -187,6 +187,28 @@ The transform URL uses these query params:
   - Integer in `[0..100]`
   - **Default**: `100`
 
+### CDN caching
+
+This package is designed to sit behind a CDN, so responses are built to cache well:
+
+- **Long-lived, immutable responses**: the default `Cache-Control` is `public, max-age=31536000, immutable`. A transform URL fully describes its output, so the result never changes for a given URL — configure it via `cacheControl` if you want a different policy.
+- **Explicit format, no `Vary: Accept`**: the output format is chosen by the `fmt` param, not negotiated from the `Accept` header. This deliberately avoids `Vary: Accept`, which fragments cache entries and is handled inconsistently across CDNs.
+- **`No-Vary-Search`**: every successful response carries a [`No-Vary-Search`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/No-Vary-Search) header advertising the only params that affect the output:
+
+  ```
+  No-Vary-Search: key-order, params, except=("w" "h" "fit" "fmt" "q" "source")
+  ```
+
+  This tells caches to ignore param order and any unrelated params (e.g. `utm_*` tracking), so `?source=/cat.jpg&w=800&utm_campaign=x` collapses onto the same entry as `?w=800&source=/cat.jpg`. It mirrors how the handler computes its own cache key. Support is currently strongest in the browser HTTP cache and Speculation-Rules prefetch (Chromium); CDN support is still emerging.
+
+**Configuring the CDN cache key.** Because `No-Vary-Search` isn't yet widely honored by CDNs, get the same normalization at the edge by keying only on the significant params (`w`, `h`, `fit`, `fmt`, `q`, `source`) and ignoring the rest:
+
+- **CloudFront** — a Cache Policy with a query-string allowlist of those params.
+- **Cloudflare** — Cache Rules / a custom Cache Key including only those params.
+- **Fastly** — sort the query and strip unknown params in VCL.
+
+If all your URLs come from `createImageUrlBuilder`, they're already canonical (fixed param order, no extras), so this mostly matters for hand-built or tracking-decorated URLs.
+
 ### License
 
 See `LICENSE.md`.

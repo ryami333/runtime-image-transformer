@@ -76,6 +76,20 @@ describe("happy path", () => {
     expect(res.headers.get("Content-Type")).toBe("image/png");
   });
 
+  it("advertises the significant query params via No-Vary-Search", async () => {
+    stubUpstream(await makePng());
+    const handler = makeHandler();
+
+    // Fresh response, then the cache-hit response — both should carry it.
+    const fresh = await handler(req({ source: "/a.png", fmt: "webp" }));
+    const cached = await handler(req({ source: "/a.png", fmt: "webp" }));
+
+    const expected =
+      'key-order, params, except=("w" "h" "fit" "fmt" "q" "source")';
+    expect(fresh.headers.get("No-Vary-Search")).toBe(expected);
+    expect(cached.headers.get("No-Vary-Search")).toBe(expected);
+  });
+
   it("caches: a second request does not hit upstream", async () => {
     const fetchMock = stubUpstream(await makePng());
     const handler = makeHandler();

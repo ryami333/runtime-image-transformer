@@ -3,6 +3,7 @@ import { searchParamsToTransformConfigCodec } from "./searchParamsToTransformCon
 import { getTransformCacheKey } from "./getTransformCacheKey";
 import { readTransformCache } from "./readTransformCache";
 import { readCappedBody } from "./readCappedBody";
+import { noVarySearchHeader } from "./noVarySearchHeader";
 import sharp, { type Sharp } from "sharp";
 import { pipe } from "fp-ts/function";
 import { writeTransformCache } from "./writeTransformCache";
@@ -122,6 +123,7 @@ export const createImageTransformRouteHandler = ({
         headers: {
           "Content-Type": cached.contentType,
           "Cache-Control": cacheControl,
+          "No-Vary-Search": noVarySearchHeader,
         },
       });
     }
@@ -238,6 +240,7 @@ export const createImageTransformRouteHandler = ({
       headers: {
         "Content-Type": contentType,
         "Cache-Control": cacheControl,
+        "No-Vary-Search": noVarySearchHeader,
       },
     });
   };
