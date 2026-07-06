@@ -7,6 +7,7 @@ import { noVarySearchHeader } from "./noVarySearchHeader";
 import sharp, { type Sharp } from "sharp";
 import { pipe } from "fp-ts/function";
 import { writeTransformCache } from "./writeTransformCache";
+import type { Format } from "./transformConfigSchema";
 
 export const createImageTransformRouteHandler = ({
   sourceOrigin,
@@ -15,6 +16,7 @@ export const createImageTransformRouteHandler = ({
   maxSourceBytes = 20 * 1024 * 1024,
   maxInputPixels = 3840 * 3840,
   fetchTimeoutMs = 10_000,
+  allowedFormats = ["preserve", "webp", "avif"],
 }: {
   /**
    * Trusted origin that `source` paths are resolved against, e.g.
@@ -56,6 +58,19 @@ export const createImageTransformRouteHandler = ({
    * @default 10_000 (10 seconds)
    */
   fetchTimeoutMs?: number;
+  /**
+   * Output formats a request is permitted to ask for via the `fmt` param. A
+   * request whose effective format (`fmt`, or `"preserve"` when omitted) isn't
+   * in this list is rejected with `400`.
+   *
+   * Restricting this lets you avoid transcoding to formats you never intend to
+   * serve — e.g. keeping the surface to modern codecs, or forbidding `preserve`
+   * to guarantee every response is re-encoded. The schema still recognises the
+   * full set of formats; this narrows which are reachable at runtime.
+   *
+   * @default ["preserve", "webp", "avif"]
+   */
+  allowedFormats?: Format[];
 }) => {
   let origin: URL;
   try {
@@ -71,6 +86,8 @@ export const createImageTransformRouteHandler = ({
       "createImageTransformRouteHandler: `sourceOrigin` must be an http(s) URL.",
     );
   }
+
+  const allowedFormatSet = new Set<Format>(allowedFormats);
 
   // The codec's `decode` throws for missing/invalid params (e.g. a missing
   // `source`); `safeDecode` reports schema issues via `error`. Handle both so
@@ -90,6 +107,11 @@ export const createImageTransformRouteHandler = ({
     const transformConfig = decodeConfig(req.url);
 
     if (!transformConfig) {
+      return new Response("Bad Request", { status: 400 });
+    }
+
+    // An omitted `fmt` means "preserve", so gate on that same effective format.
+    if (!allowedFormatSet.has(transformConfig.fmt ?? "preserve")) {
       return new Response("Bad Request", { status: 400 });
     }
 

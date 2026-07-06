@@ -58,7 +58,12 @@ describe("happy path", () => {
     "transcodes to %s",
     async (fmt, contentType, decodedFormat) => {
       stubUpstream(await makePng(200, 200));
-      const handler = makeHandler();
+      // These formats aren't in the default allowlist, so opt them all in.
+      const handler = createImageTransformRouteHandler({
+        sourceOrigin: SOURCE_ORIGIN,
+        cacheDir,
+        allowedFormats: ["jpeg", "png", "webp", "avif", "gif", "tiff"],
+      });
 
       const res = await handler(req({ source: "/a.png", fmt }));
 
@@ -158,6 +163,42 @@ describe("rejects bad input", () => {
     );
     const res = await makeHandler()(req({ source: "/a.png", fmt: "webp" }));
     expect(res.status).toBe(502);
+  });
+});
+
+describe("allowedFormats", () => {
+  it("400 when the requested fmt is not allowed (gif, by default)", async () => {
+    stubUpstream(await makePng());
+    const res = await makeHandler()(req({ source: "/a.png", fmt: "gif" }));
+    expect(res.status).toBe(400);
+  });
+
+  it("allows a format once it is added to allowedFormats", async () => {
+    stubUpstream(await makePng());
+    const handler = createImageTransformRouteHandler({
+      sourceOrigin: SOURCE_ORIGIN,
+      cacheDir,
+      allowedFormats: ["preserve", "webp", "avif", "gif"],
+    });
+
+    const res = await handler(req({ source: "/a.png", fmt: "gif" }));
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Type")).toBe("image/gif");
+  });
+
+  it("400 on an omitted fmt when preserve is not allowed", async () => {
+    stubUpstream(await makePng());
+    const handler = createImageTransformRouteHandler({
+      sourceOrigin: SOURCE_ORIGIN,
+      cacheDir,
+      allowedFormats: ["webp", "avif"],
+    });
+
+    // No `fmt` means the effective format is "preserve", which this config
+    // forbids — so every request must name an allowed format.
+    const res = await handler(req({ source: "/a.png" }));
+    expect(res.status).toBe(400);
   });
 });
 

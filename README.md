@@ -144,6 +144,10 @@ Returns: `(req: Request) => Promise<Response>` (a Web Fetch handler — compatib
   - **Description**: Timeout for the upstream fetch. Bounds the whole upstream interaction — connect, response, and body download — so a slow or hanging `source` can't tie up the request indefinitely. On timeout the handler responds with `502`.
   - **Default**: `10_000` (10 seconds)
 
+- **`allowedFormats`**: `Array<"preserve" | "jpeg" | "png" | "webp" | "avif" | "gif" | "tiff">` (optional)
+  - **Description**: Output formats a request may ask for via `fmt`. A request whose effective format (`fmt`, or `"preserve"` when omitted) isn't in this list is rejected with `400`. Use it to keep the served surface to the formats you actually want — e.g. modern codecs only, or dropping `"preserve"` to force every response to be re-encoded.
+  - **Default**: `["preserve", "webp", "avif"]`
+
 > **Note**: Upstream redirects are **not** followed (`redirect: "manual"`). A redirect is treated as a failed fetch (`502`) so it can't be used to bounce the server off `sourceOrigin` to an internal address.
 
 **Behavior notes**
