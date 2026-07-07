@@ -395,9 +395,9 @@ describe("sourceOrigin validation", () => {
   });
 
   it("throws when sourceOrigin is not http(s)", () => {
-    expect(() =>
-      makeHandler({ sourceOrigin: "ftp://origin.test" }),
-    ).toThrow(/http/);
+    expect(() => makeHandler({ sourceOrigin: "ftp://origin.test" })).toThrow(
+      /http/,
+    );
   });
 });
 
