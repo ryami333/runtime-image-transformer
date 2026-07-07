@@ -57,7 +57,7 @@ Pluggable via the `CachePlugin` contract (`read(key)` / `write(key, entry)`). Ca
 These are the reason the handler is shaped the way it is; the code comments spell out the attacks. Preserve them:
 
 - **SSRF**: `sourceOrigin` is fixed server-side config, never derived from the request (`Host` is attacker-controlled). `source` is always a path joined to that origin; off-origin resolutions are rejected. Upstream redirects are not followed.
-- **Resource exhaustion**: `maxSourceBytes` caps bytes off the network (checked against `Content-Length` *and* while streaming, see `readCappedBody.ts`); `maxInputPixels` caps decoded pixels (pixel bombs); `fetchTimeoutMs` bounds the whole upstream interaction.
+- **Resource exhaustion**: `maxSourceBytes` caps bytes off the network (checked against `Content-Length` _and_ while streaming, see `readCappedBody.ts`); `maxInputPixels` caps decoded pixels (pixel bombs); `fetchTimeoutMs` bounds the whole upstream interaction.
 - **Content sniffing**: responses always set `X-Content-Type-Options: nosniff`. For `preserve`, the upstream must declare an `image/*` content-type or it's rejected (502) — otherwise attacker HTML on the source origin could be sniffed as markup.
 
 ## Conventions
