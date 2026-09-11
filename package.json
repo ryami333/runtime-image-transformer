@@ -34,7 +34,7 @@
     "eslint": "^10.6.0",
     "prettier": "^3.9.4",
     "release-it": "^20.2.1",
-    "sharp": "^0.35.3",
+    "sharp": "^0.35.4",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.62.1",
     "vite": "^8.1.3",
